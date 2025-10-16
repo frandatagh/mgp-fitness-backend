@@ -1,0 +1,44 @@
+// 1) Generador del cliente Prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 2) Configuración de la base de datos
+datasource db {
+  provider = "postgresql" // Cambiá a "mysql" o "sqlite" si preferís
+  url      = env("DATABASE_URL") // Usa la variable de entorno de tu .env
+}
+
+// 3) Modelos de datos
+model User {
+  id        String    @id @default(cuid()) // Identificador único
+  email     String    @unique
+  password  String
+  name      String?
+  routines  Routine[] // Relación 1:N con rutinas
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Routine {
+  id        String     @id @default(cuid())
+  title     String
+  notes     String?
+  user      User       @relation(fields: [userId], references: [id])
+  userId    String
+  exercises Exercise[] // Relación 1:N con ejercicios
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model Exercise {
+  id        String   @id @default(cuid())
+  name      String
+  sets      String?  // Texto libre (ej: "3x10" o "3 al fallo")
+  reps      String?  // Texto libre (ej: "10-12" o "fallo")
+  notes     String?
+  routine   Routine  @relation(fields: [routineId], references: [id])
+  routineId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
