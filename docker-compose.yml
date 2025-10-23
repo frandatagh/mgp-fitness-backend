@@ -1,13 +1,21 @@
+# docker-compose.yml
 services:
   db:
-    image: postgres:15
+    image: postgres:16
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: mgp_db
-    volumes:
-      - db-data:/var/lib/postgresql/data
+      POSTGRES_USER: ${POSTGRES_USER:-mgp_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mgp_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-mgp_fitness}
     ports:
       - "5432:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+  adminer:
+    image: adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080" # http://localhost:8080
+
 volumes:
-  db-data:
+  dbdata:

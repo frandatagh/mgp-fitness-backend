@@ -1,5 +1,5 @@
 const express = require('express');
-const prisma = require('../prisma');
+const prisma = require('../prismaClient');
 const router = express.Router();
 
 // TODO: agregar middleware auth
