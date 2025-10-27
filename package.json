@@ -1,6 +1,7 @@
 {
   "name": "mgp-fitness-backend",
   "version": "1.0.0",
+  "type": "module",
   "description": "Backend del proyecto MGP Rutina Fitness. API con Node.js y Express + PostgreSQL.",
   "main": "index.js",
   "scripts": {
