@@ -67,4 +67,56 @@ router.post("/", async (req, res, next) => {
   }
 });
 
+// GET /api/routines/:id  -> detalle de una rutina propia
+router.get("/:id", async (req, res, next) => {
+  try {
+    const routine = await prisma.routine.findFirst({
+      where: { id: req.params.id, userId: req.user.id },
+      include: { exercises: true }
+    });
+    if (!routine) return res.status(404).json({ message: "Routine not found" });
+    res.json(routine);
+  } catch (err) { next(err); }
+});
+
+// PUT /api/routines/:id  -> actualizar título/notas de una rutina propia
+router.put("/:id", async (req, res, next) => {
+  try {
+    const existing = await prisma.routine.findFirst({
+      where: { id: req.params.id, userId: req.user.id }
+    });
+    if (!existing) return res.status(404).json({ message: "Routine not found" });
+
+    const { title, notes } = req.body || {};
+    const data = {};
+    if (title !== undefined) {
+      if (!title || typeof title !== "string") {
+        return res.status(400).json({ message: "title must be a non-empty string" });
+      }
+      data.title = title;
+    }
+    if (notes !== undefined) data.notes = notes ?? null;
+
+    const updated = await prisma.routine.update({ where: { id: existing.id }, data });
+    res.json(updated);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/routines/:id  -> borrar una rutina propia
+router.delete("/:id", async (req, res, next) => {
+  try {
+    const existing = await prisma.routine.findFirst({
+      where: { id: req.params.id, userId: req.user.id }
+    });
+    if (!existing) return res.status(404).json({ message: "Routine not found" });
+
+    await prisma.routine.delete({ where: { id: existing.id } });
+    res.status(204).send();
+  } catch (err) { next(err); }
+});
+
+
 export default router;
+
+import exercisesRouter from "./exercises.js";
+router.use("/:routineId/exercises", exercisesRouter);
