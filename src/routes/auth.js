@@ -4,7 +4,11 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import prisma from "../config/prismaClient.js";
 
+import { validate } from "../middlewares/validate.js";
+import { registerSchema, loginSchema } from "../schemas/authSchemas.js";
+
 const router = express.Router();
+
 
 function ensureJwtSecret() {
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {

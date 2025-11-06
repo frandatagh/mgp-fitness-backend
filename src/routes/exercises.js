@@ -2,8 +2,14 @@ import express from "express";
 import prisma from "../config/prismaClient.js";
 import { verifyToken } from "../middlewares/auth.js";
 
+import { validate } from "../middlewares/validate.js";
+import { exerciseCreateSchema, exerciseUpdateSchema } from "../schemas/exerciseSchemas.js";
+
+
+
 const router = express.Router({ mergeParams: true }); // <- clave para :routineId
 router.use(verifyToken);
+
 
 // helper: asegura que la rutina sea del usuario
 async function getOwnedRoutine(req) {
@@ -14,7 +20,7 @@ async function getOwnedRoutine(req) {
 }
 
 // POST /api/routines/:routineId/exercises
-router.post("/", async (req, res, next) => {
+router.post("/", validate(exerciseCreateSchema), async (req, res, next) => {
   try {
     const routine = await getOwnedRoutine(req);
     if (!routine) return res.status(404).json({ message: "Routine not found" });
@@ -29,7 +35,7 @@ router.post("/", async (req, res, next) => {
         sets: sets ?? null,
         reps: reps ?? null,
         notes: notes ?? null,
-        order: Number.isInteger(order) ? order : 0,
+        order: order ?? 0,
         routineId: routine.id
       }
     });
@@ -52,7 +58,7 @@ router.get("/", async (req, res, next) => {
 });
 
 // PUT /api/routines/:routineId/exercises/:exerciseId
-router.put("/:exerciseId", async (req, res, next) => {
+router.put("/:exerciseId", validate(exerciseUpdateSchema),async (req, res, next) => {
   try {
     const routine = await getOwnedRoutine(req);
     if (!routine) return res.status(404).json({ message: "Routine not found" });
@@ -72,7 +78,7 @@ router.put("/:exerciseId", async (req, res, next) => {
     if (sets !== undefined) data.sets = sets ?? null;
     if (reps !== undefined) data.reps = reps ?? null;
     if (notes !== undefined) data.notes = notes ?? null;
-    if (order !== undefined) data.order = Number.isInteger(order) ? order : 0;
+    if (order !== undefined) data.order = order;
 
     const updated = await prisma.exercise.update({
       where: { id: ex.id },

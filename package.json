@@ -3,13 +3,18 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Backend del proyecto MGP Rutina Fitness. API con Node.js y Express + PostgreSQL.",
-  "main": "index.js",
+  "main": "src/index.js",
   "scripts": {
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
-    "migrate": "prisma migrate dev --name init",
+
     "prisma:generate": "prisma generate",
-    "test": "jest"
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+
+    "test": "cross-env NODE_OPTIONS=--experimental-vm-modules NODE_ENV=test JWT_SECRET=testing_secret_super_long_123 DATABASE_URL=postgresql://mgp_user:mgp_pass@localhost:5432/mgp_fitness_test?schema=public jest --runInBand --detectOpenHandles",
+    "test:watch": "npm run test -- --watch",
+    "prepare": "husky install"
   },
   "repository": {
     "type": "git",
@@ -24,26 +29,26 @@
   "homepage": "https://github.com/frandatagh/mgp-fitness-backend#readme",
   "dependencies": {
     "@prisma/client": "^6.18.0",
-    "ajv": "^8.17.1",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
-    "csv-parse": "^6.1.0",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
-    "multer": "^2.0.2",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
-    "eslint": "^9.36.0",
-    "husky": "^9.1.7",
-    "jest": "^30.1.3",
-    "lint-staged": "^16.2.0",
+    "cross-env": "^10.1.0",
+    "jest": "^30.2.0",
     "nodemon": "^3.1.10",
     "prettier": "^3.6.2",
     "prisma": "^6.18.0",
     "supertest": "^7.1.4"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "verbose": true
   }
 }
