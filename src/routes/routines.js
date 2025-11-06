@@ -3,7 +3,13 @@ import express from "express";
 import { verifyToken } from "../middlewares/auth.js";
 import prisma from "../config/prismaClient.js";
 
+import { validate } from "../middlewares/validate.js";
+import { routineCreateSchema, routineUpdateSchema } from "../schemas/routineSchemas.js";
+
 const router = express.Router();
+
+
+
 
 // Todas las rutas abajo requieren JWT
 router.use(verifyToken);
