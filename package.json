@@ -7,11 +7,9 @@
   "scripts": {
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
-
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules NODE_ENV=test JWT_SECRET=testing_secret_super_long_123 DATABASE_URL=postgresql://mgp_user:mgp_pass@localhost:5432/mgp_fitness_test?schema=public jest --runInBand --detectOpenHandles",
     "test:watch": "npm run test -- --watch",
     "prepare": "husky install"
