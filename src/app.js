@@ -27,6 +27,9 @@ app.get('/test-db', async (req, res) => {
 import authRoutes from './routes/auth.js';
 import routineRoutes from './routes/routines.js';
 
+app.use(express.json({ limit: "1mb" }));
+app.use("/api/routines/import/csv", express.text({ type: "*/*", limit: "1mb" }));
+
 app.use('/api/auth', authRoutes);
 app.use('/api/routines', routineRoutes);
 
