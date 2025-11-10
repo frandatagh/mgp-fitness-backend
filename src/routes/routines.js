@@ -16,6 +16,9 @@ import {
 import { routineToCsv, csvToRoutine } from "../utils/csv.js";
 import exercisesRouter from "./exercises.js";
 
+import { validate } from "../middlewares/validate.js";
+import { routineCreateSchema, routineUpdateSchema } from "../schemas/routineSchemas.js";
+
 const router = express.Router();
 
 // Todas las rutas de routines requieren JWT
