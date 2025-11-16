@@ -8,7 +8,11 @@ import prisma from './config/prismaClient.js';
 const app = express();
 
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: ["http://localhost:5173", "http://127.0.0.1:5173"], // Vite (ajusta si usás otro puerto)
+  credentials: false,
+}
+));
 app.use(morgan('dev'));
 app.use(express.json());
 
