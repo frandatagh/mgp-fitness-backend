@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  //url      = env("DATABASE_URL")
 }
 
 // Modelos de datos
@@ -37,6 +37,7 @@ model Exercise {
   sets      String? // Texto libre (ej: "3x10" o "3 al fallo")
   reps      String? // Texto libre (ej: "10-12" o "fallo")
   notes     String?
+  day       String?
   routine   Routine  @relation(fields: [routineId], references: [id], onDelete: Cascade)
   routineId String
   createdAt DateTime @default(now())

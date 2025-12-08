@@ -5,7 +5,8 @@ export const exerciseCreateSchema = z.object({
   sets: z.string().optional(),
   reps: z.string().optional(),
   notes: z.string().optional(),
-  order: z.number().int().optional()
+  order: z.number().int().optional(),
+  day: z.string().optional(),
 });
 
 export const exerciseUpdateSchema = z.object({
@@ -13,7 +14,8 @@ export const exerciseUpdateSchema = z.object({
   sets: z.string().optional(),
   reps: z.string().optional(),
   notes: z.string().optional(),
-  order: z.number().int().optional()
+  order: z.number().int().optional(),
+  day: z.string().optional(),
 });
 
 export const exerciseParamsSchema = z.object({
