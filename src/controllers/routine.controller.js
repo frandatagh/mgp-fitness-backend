@@ -1,6 +1,24 @@
 // src/controllers/routinesController.js (por ejemplo)
 import prisma from '../config/prismaClient.js';
 
+const routineService = require('../services/routineService');
+
+exports.markDone = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id; // según como obtengas el usuario logueado
+
+    const routine = await routineService.markDone({ id, userId });
+
+    return res.json(routine);
+  } catch (err) {
+    console.error('Error marcando rutina como realizada:', err);
+    return res.status(500).json({ message: 'No se pudo marcar la rutina.' });
+  }
+};
+
+
+
 export async function updateRoutineHandler(req, res) {
   const userId = req.user.id;
   const routineId = req.params.id;

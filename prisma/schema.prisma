@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  //url      = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
 }
 
 // Modelos de datos
@@ -19,14 +19,15 @@ model User {
 }
 
 model Routine {
-  id        String     @id @default(cuid())
-  title     String
-  notes     String?
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-  exercises Exercise[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id         String     @id @default(cuid())
+  title      String
+  notes      String?
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  exercises  Exercise[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  lastDoneAt DateTime?
 
   @@index([userId])
 }

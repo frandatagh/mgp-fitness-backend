@@ -21,6 +21,7 @@ import exercisesRouter from "./exercises.js";
 
 
 
+
 const router = express.Router();
 
 // Todas las rutas de routines requieren JWT
@@ -28,6 +29,63 @@ router.use(verifyToken);
 
 // Subrouter de ejercicios anidado
 router.use("/:routineId/exercises", exercisesRouter);
+
+// 👉 RUTINAS SUGERIDAS (LISTA)
+router.get("/suggestions", verifyToken, async (req, res) => {
+  try {
+    const suggestionsUser = await prisma.user.findUnique({
+      where: { email: SUGGESTIONS_EMAIL },
+    });
+
+    if (!suggestionsUser) {
+      return res
+        .status(500)
+        .json({ error: "Usuario de sugerencias no configurado" });
+    }
+
+    const routines = await prisma.routine.findMany({
+      where: { userId: suggestionsUser.id },
+      include: { exercises: true },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.json({ items: routines });
+  } catch (err) {
+    console.error("Error cargando sugerencias:", err);
+    res.status(500).json({ error: "Error al cargar rutinas sugeridas" });
+  }
+});
+
+// 👉 RUTINA SUGERIDA (DETALLE)
+router.get("/suggestions/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const suggestionsUser = await prisma.user.findUnique({
+      where: { email: SUGGESTIONS_EMAIL },
+    });
+
+    if (!suggestionsUser) {
+      return res
+        .status(500)
+        .json({ error: "Usuario de sugerencias no configurado" });
+    }
+
+    const routine = await prisma.routine.findFirst({
+      where: { id, userId: suggestionsUser.id },
+      include: { exercises: true },
+    });
+
+    if (!routine) {
+      return res.status(404).json({ error: "Rutina sugerida no encontrada" });
+    }
+
+    res.json(routine);
+  } catch (err) {
+    console.error("Error detalle sugerencia:", err);
+    res.status(500).json({ error: "Error al cargar la rutina sugerida" });
+  }
+});
 
 // GET /api/routines -> lista SOLO las del usuario autenticado
 router.get("/", async (req, res, next) => {
@@ -311,5 +369,39 @@ router.post("/import/csv", async (req, res, next) => {
     res.status(201).json(created);
   } catch (err) { next(err); }
 });
+
+// Marcar rutina como "realizada por hoy"
+router.patch(
+  '/:id/done',
+  verifyToken,
+  validate(routineIdParamsSchema, 'params'),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const routine = await prisma.routine.update({
+        where: { id },                // 👈 si usas userId en el where, luego lo ajustamos
+        data: {
+          lastDoneAt: new Date(),     // campo nuevo en la tabla
+        },
+        include: {
+          exercises: true,            // igual que en tu GET, si lo usas
+        },
+      });
+
+      return res.json(routine);
+    } catch (error) {
+      console.error('Error marcando rutina como realizada:', error);
+      return res
+        .status(500)
+        .json({ message: 'No se pudo marcar la rutina como realizada.' });
+    }
+  }
+);
+const SUGGESTIONS_EMAIL = "sugerencias@prueba.com";
+
+
+
+
 
 export default router;
