@@ -19,14 +19,15 @@ model User {
 }
 
 model Routine {
-  id        String     @id @default(cuid())
-  title     String
-  notes     String?
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-  exercises Exercise[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id         String     @id @default(cuid())
+  title      String
+  notes      String?
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  exercises  Exercise[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  lastDoneAt DateTime?
 
   @@index([userId])
 }
@@ -37,6 +38,7 @@ model Exercise {
   sets      String? // Texto libre (ej: "3x10" o "3 al fallo")
   reps      String? // Texto libre (ej: "10-12" o "fallo")
   notes     String?
+  day       String?
   routine   Routine  @relation(fields: [routineId], references: [id], onDelete: Cascade)
   routineId String
   createdAt DateTime @default(now())

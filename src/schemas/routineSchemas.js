@@ -10,14 +10,28 @@ export const routineCreateSchema = z.object({
       sets: z.string().optional(),
       reps: z.string().optional(),
       notes: z.string().optional(),
-      order: z.number().int().optional()
+      order: z.number().int().optional(),
+      day: z.string().optional(),
     })
   ).optional()
 });
 
 export const routineUpdateSchema = z.object({
-  title: z.string().trim().min(1).optional(),
-  notes: z.string().optional()
+  title: z.string().min(1).optional(),
+  notes: z.string().nullable().optional(),
+  exercises: z
+    .array(
+      z.object({
+        id: z.string().optional(),          // cuando viene desde el front puede tener id (o no)
+        name: z.string().min(1),
+        sets: z.string().nullable().optional(),
+        reps: z.string().nullable().optional(),
+        notes: z.string().nullable().optional(),
+        day: z.string().nullable().optional(),
+        order: z.number().int().optional(),
+      }),
+    )
+    .optional(),
 });
 
 export const routineIdParamsSchema = z.object({
@@ -37,7 +51,8 @@ export const routineImportLimitSchema = z.object({
       sets: z.string().max(50).optional(),
       reps: z.string().max(50).optional(),
       notes: z.string().max(300).optional(),
-      order: z.number().int().min(0).max(1000).optional()
+      order: z.number().int().min(0).max(1000).optional(),
+      day: z.string().max(50).optional(),
     })
   ).max(200).optional() // evita imports gigantes
 });

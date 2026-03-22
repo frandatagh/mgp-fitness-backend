@@ -7,12 +7,15 @@ import prisma from './config/prismaClient.js';
 
 const app = express();
 
-app.use(helmet());
+app.set('etag', false);
+
+
 app.use(cors({
-  origin: ["http://localhost:5173", "http://127.0.0.1:5173"], // Vite (ajusta si usás otro puerto)
-  credentials: false,
-}
-));
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }));
+app.use(helmet());
 app.use(morgan('dev'));
 app.use(express.json());
 

@@ -9,6 +9,7 @@ import {
   routineUpdateSchema,
   routineImportJsonSchema,
   routineImportLimitSchema,
+  routineIdParamsSchema,
   // si tenés un schema para params, descomenta e importa:
   // routineIdParamsSchema,
 } from "../schemas/routineSchemas.js";
@@ -16,8 +17,10 @@ import {
 import { routineToCsv, csvToRoutine } from "../utils/csv.js";
 import exercisesRouter from "./exercises.js";
 
-import { validate } from "../middlewares/validate.js";
-import { routineCreateSchema, routineUpdateSchema } from "../schemas/routineSchemas.js";
+
+
+
+
 
 const router = express.Router();
 
@@ -26,6 +29,63 @@ router.use(verifyToken);
 
 // Subrouter de ejercicios anidado
 router.use("/:routineId/exercises", exercisesRouter);
+
+// 👉 RUTINAS SUGERIDAS (LISTA)
+router.get("/suggestions", verifyToken, async (req, res) => {
+  try {
+    const suggestionsUser = await prisma.user.findUnique({
+      where: { email: SUGGESTIONS_EMAIL },
+    });
+
+    if (!suggestionsUser) {
+      return res
+        .status(500)
+        .json({ error: "Usuario de sugerencias no configurado" });
+    }
+
+    const routines = await prisma.routine.findMany({
+      where: { userId: suggestionsUser.id },
+      include: { exercises: true },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.json({ items: routines });
+  } catch (err) {
+    console.error("Error cargando sugerencias:", err);
+    res.status(500).json({ error: "Error al cargar rutinas sugeridas" });
+  }
+});
+
+// 👉 RUTINA SUGERIDA (DETALLE)
+router.get("/suggestions/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const suggestionsUser = await prisma.user.findUnique({
+      where: { email: SUGGESTIONS_EMAIL },
+    });
+
+    if (!suggestionsUser) {
+      return res
+        .status(500)
+        .json({ error: "Usuario de sugerencias no configurado" });
+    }
+
+    const routine = await prisma.routine.findFirst({
+      where: { id, userId: suggestionsUser.id },
+      include: { exercises: true },
+    });
+
+    if (!routine) {
+      return res.status(404).json({ error: "Rutina sugerida no encontrada" });
+    }
+
+    res.json(routine);
+  } catch (err) {
+    console.error("Error detalle sugerencia:", err);
+    res.status(500).json({ error: "Error al cargar la rutina sugerida" });
+  }
+});
 
 // GET /api/routines -> lista SOLO las del usuario autenticado
 router.get("/", async (req, res, next) => {
@@ -57,6 +117,7 @@ router.post("/", validate(routineCreateSchema), async (req, res, next) => {
                   sets: ex?.sets ?? null,
                   reps: ex?.reps ?? null,
                   notes: ex?.notes ?? null,
+                  day: ex?.day ?? null, 
                   order: ex?.order ?? idx,
                 }))
                 .filter(e => e.name && typeof e.name === "string"),
@@ -78,48 +139,114 @@ router.post("/", validate(routineCreateSchema), async (req, res, next) => {
 // GET /api/routines/:id -> detalle de una rutina propia
 router.get(
   "/:id",
-  // validate(routineIdParamsSchema, "params"),
+  validate(routineIdParamsSchema, "params"),
   async (req, res, next) => {
     try {
+      console.log("🔍 GET /api/routines/:id");
+      console.log("  id param:", req.params.id);
+      console.log("  user from token:", req.user?.id);
+
       const routine = await prisma.routine.findFirst({
         where: { id: req.params.id, userId: req.user.id },
         include: { exercises: true },
       });
-      if (!routine) return res.status(404).json({ message: "Routine not found" });
+
+      console.log("  routine found?", !!routine);
+
+      if (!routine) {
+        return res.status(404).json({ message: "Routine not found" });
+      }
+
       res.json(routine);
-    } catch (err) { next(err); }
+    } catch (err) {
+      console.error("❌ Error en GET /api/routines/:id:", err);
+      next(err);
+    }
   }
 );
+
 
 // PUT /api/routines/:id -> actualizar título/notas de una rutina propia
 router.put(
   "/:id",
-  // validate(routineIdParamsSchema, "params"),
+  verifyToken,                                     // 👈 aseguramos que haya req.user.id
+  validate(routineIdParamsSchema, "params"),
   validate(routineUpdateSchema, "body"),
   async (req, res, next) => {
     try {
-      const existing = await prisma.routine.findFirst({
-        where: { id: req.params.id, userId: req.user.id },
-      });
-      if (!existing) return res.status(404).json({ message: "Routine not found" });
+      const routineId = req.params.id;
+      const userId = req.user.id;
+      const { title, notes, exercises } = req.body;
 
-      const { title, notes } = req.body;
-      const updated = await prisma.routine.update({
-        where: { id: existing.id },
-        data: {
-          ...(title !== undefined ? { title } : {}),
-          ...(notes !== undefined ? { notes: notes ?? null } : {}),
-        },
+      // 1) Verificar que la rutina exista y sea del usuario
+      const existing = await prisma.routine.findFirst({
+        where: { id: routineId, userId },
       });
-      res.json(updated);
-    } catch (err) { next(err); }
+
+      if (!existing) {
+        return res.status(404).json({ message: "Routine not found" });
+      }
+
+      // 2) Usamos una transacción para actualizar rutina + ejercicios
+      const updatedRoutine = await prisma.$transaction(async (tx) => {
+        // 2.a) actualizar título / notas
+        await tx.routine.update({
+          where: { id: routineId },
+          data: {
+            ...(title !== undefined ? { title } : {}),
+            ...(notes !== undefined ? { notes: notes ?? null } : {}),
+          },
+        });
+
+        // 2.b) si el body trae exercises, reseteamos la lista
+        if (Array.isArray(exercises)) {
+          // borrar los ejercicios anteriores de esta rutina
+          await tx.exercise.deleteMany({
+            where: { routineId },
+          });
+
+          // crear los nuevos (si hay)
+          if (exercises.length > 0) {
+            await tx.exercise.createMany({
+              data: exercises.map((ex, index) => ({
+                name: ex.name,
+                sets: ex.sets ?? null,
+                reps: ex.reps ?? null,
+                notes: ex.notes ?? null,
+                day: ex.day ?? null,
+                order:
+                  typeof ex.order === "number"
+                    ? ex.order
+                    : index,          // fallback si no mandás order
+                routineId,
+              })),
+            });
+          }
+        }
+
+        // 2.c) devolver la rutina ya con ejercicios actualizados
+        return tx.routine.findUnique({
+          where: { id: routineId },
+          include: {
+            exercises: {
+              orderBy: { order: "asc" },
+            },
+          },
+        });
+      });
+
+      res.json(updatedRoutine);
+    } catch (err) {
+      next(err);
+    }
   }
 );
+
 
 // DELETE /api/routines/:id -> borrar una rutina propia
 router.delete(
   "/:id",
-  // validate(routineIdParamsSchema, "params"),
+  validate(routineIdParamsSchema, "params"),
   async (req, res, next) => {
     try {
       const existing = await prisma.routine.findFirst({
@@ -242,5 +369,39 @@ router.post("/import/csv", async (req, res, next) => {
     res.status(201).json(created);
   } catch (err) { next(err); }
 });
+
+// Marcar rutina como "realizada por hoy"
+router.patch(
+  '/:id/done',
+  verifyToken,
+  validate(routineIdParamsSchema, 'params'),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const routine = await prisma.routine.update({
+        where: { id },                // 👈 si usas userId en el where, luego lo ajustamos
+        data: {
+          lastDoneAt: new Date(),     // campo nuevo en la tabla
+        },
+        include: {
+          exercises: true,            // igual que en tu GET, si lo usas
+        },
+      });
+
+      return res.json(routine);
+    } catch (error) {
+      console.error('Error marcando rutina como realizada:', error);
+      return res
+        .status(500)
+        .json({ message: 'No se pudo marcar la rutina como realizada.' });
+    }
+  }
+);
+const SUGGESTIONS_EMAIL = "sugerencias@prueba.com";
+
+
+
+
 
 export default router;
