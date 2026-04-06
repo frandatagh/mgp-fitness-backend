@@ -9,14 +9,16 @@ datasource db {
 
 // Modelos de datos
 model User {
-  id              String           @id @default(cuid())
-  email           String           @unique
-  password        String
-  name            String?
-  routines        Routine[]
-  contactMessages ContactMessage[]
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  id                  String               @id @default(cuid())
+  email               String               @unique
+  password            String
+  name                String?
+  routines            Routine[]
+  contactMessages     ContactMessage[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  passwordResetTokens PasswordResetToken[]
+  profile             UserProfile?
 }
 
 model Routine {
@@ -68,4 +70,32 @@ model ContactMessage {
   user   User?   @relation(fields: [userId], references: [id])
 
   createdAt DateTime @default(now())
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  goal            String?
+  heightCm        Float?
+  weightKg        Float?
+  birthDate       DateTime?
+  profileImageUrl String?
+  planType        String    @default("standard")
+  weeklyKmGoal    Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
