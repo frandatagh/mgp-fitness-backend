@@ -45,3 +45,55 @@ export async function sendContactNotificationEmail({
 
   return data;
 }
+
+export async function sendPasswordResetEmail({ to, resetUrl }) {
+  const { data, error } = await resend.emails.send({
+    from: process.env.CONTACT_FROM_EMAIL,
+    to: [to],
+    subject: 'Restablece tu contraseña - MGP Rutina Fitness',
+    replyTo: process.env.CONTACT_TO_EMAIL,
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+        <h2>Recuperación de contraseña</h2>
+        <p>Recibimos una solicitud para restablecer tu contraseña.</p>
+        <p>Haz clic en el siguiente enlace para continuar:</p>
+        <p>
+          <a href="${resetUrl}" target="_blank" rel="noopener noreferrer">
+            Restablecer contraseña
+          </a>
+        </p>
+        <p>Este enlace caduca en 1 hora.</p>
+        <p>Si no solicitaste este cambio, puedes ignorar este mensaje.</p>
+      </div>
+    `,
+  });
+
+  if (error) {
+    throw new Error(error.message || 'No se pudo enviar el correo de recuperación');
+  }
+
+  return data;
+}
+
+export async function sendWelcomeEmail({ to, name }) {
+  const { data, error } = await resend.emails.send({
+    from: process.env.CONTACT_FROM_EMAIL,
+    to: [to],
+    subject: 'Bienvenido a MGP Rutina Fitness',
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+        <h2>¡Bienvenido a MGP Rutina Fitness!</h2>
+        <p>Hola ${name ?? 'usuario'},</p>
+        <p>Tu cuenta ha sido creada correctamente.</p>
+        <p>Ya puedes comenzar a crear rutinas, explorar sugerencias y aprovechar las herramientas de la aplicación.</p>
+        <p>Gracias por formar parte de este proyecto.</p>
+      </div>
+    `,
+  });
+
+  if (error) {
+    throw new Error(error.message || 'No se pudo enviar el correo de bienvenida');
+  }
+
+  return data;
+}

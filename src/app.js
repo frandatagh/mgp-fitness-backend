@@ -4,6 +4,10 @@ import helmet from 'helmet';
 import cors from 'cors';
 import morgan from 'morgan';
 import prisma from './config/prismaClient.js';
+import profileRoutes from './routes/profile.js';
+import authRoutes from './routes/auth.js';
+import routineRoutes from './routes/routines.js';
+import contactRoutes from './routes/contact.js';
 
 import authRoutes from './routes/auth.js';
 import routineRoutes from './routes/routines.js';
@@ -42,6 +46,7 @@ app.get('/test-db', async (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/routines', routineRoutes);
 app.use('/api/contact', contactRoutes);
+app.use('/api/profile', profileRoutes);
 
 // 404
 app.use((req, res) => {

@@ -5,7 +5,12 @@ import jwt from "jsonwebtoken";
 import prisma from "../config/prismaClient.js";
 
 import { validate } from "../middlewares/validate.js";
+import { sendWelcomeEmail } from '../services/emailService.js';
 import { registerSchema, loginSchema } from "../schemas/authSchemas.js";
+
+import crypto from 'crypto';
+import { forgotPasswordSchema, resetPasswordSchema } from '../schemas/authSchemas.js';
+import { sendPasswordResetEmail } from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -59,9 +64,21 @@ router.post("/register", async (req, res, next) => {
 
     // Usa select para no exponer password accidentalmente
     const user = await prisma.user.create({
-      data: { email, password: hash, name: name ?? null },
+      data: { email, password: hash, name: name ?? null, profile: {
+      create: {},
+    }, },
       select: { id: true, email: true, name: true }
     });
+    if (user.email) {
+      try {
+        await sendWelcomeEmail({
+          to: user.email,
+          name: user.name,
+      });
+      } catch (mailError) {
+        console.error('Error enviando email de bienvenida:', mailError);
+      }
+    }
 
     const token = signJwt(user.id);
     return res.status(201).json({ token, user });
@@ -106,5 +123,108 @@ router.post("/login", async (req, res, next) => {
     return next(err);
   }
 });
+
+router.post(
+  '/forgot-password',
+  validate(forgotPasswordSchema),
+  async (req, res, next) => {
+    try {
+      const { email } = req.body;
+
+      const user = await prisma.user.findUnique({
+        where: { email },
+      });
+
+      // respuesta genérica para no revelar si el correo existe
+      const safeResponse = {
+        message:
+          'Si el correo ingresado pertenece a una cuenta registrada, recibirás un mensaje con los pasos para restablecer tu contraseña.',
+      };
+
+      if (!user) {
+        return res.status(200).json(safeResponse);
+      }
+
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+      const expiresAt = new Date(Date.now() + 1000 * 60 * 60); // 1 hora
+
+      await prisma.passwordResetToken.create({
+        data: {
+          tokenHash,
+          expiresAt,
+          userId: user.id,
+        },
+      });
+      const appBaseUrl = (process.env.APP_BASE_URL || 'http://localhost:8081').trim();
+
+      console.log('APP_BASE_URL raw:', process.env.APP_BASE_URL);
+      console.log('APP_BASE_URL final:', appBaseUrl);
+
+      const resetUrl = `${appBaseUrl}/reset-password?token=${rawToken}`;
+      console.log('resetUrl:', resetUrl);
+      
+      try {
+        await sendPasswordResetEmail({
+          to: user.email,
+          resetUrl,
+        });
+      } catch (mailError) {
+        console.error('Error enviando email de recuperación:', mailError);
+      }
+
+      return res.status(200).json(safeResponse);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.post(
+  '/reset-password',
+  validate(resetPasswordSchema),
+  async (req, res, next) => {
+    try {
+      const { token, password } = req.body;
+
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+      const resetRecord = await prisma.passwordResetToken.findUnique({
+        where: { tokenHash },
+        include: { user: true },
+      });
+
+      if (
+        !resetRecord ||
+        resetRecord.usedAt ||
+        resetRecord.expiresAt.getTime() < Date.now()
+      ) {
+        return res.status(400).json({
+          message: 'El enlace de recuperación es inválido o ha expirado.',
+        });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      await prisma.$transaction([
+        prisma.user.update({
+          where: { id: resetRecord.userId },
+          data: { password: passwordHash },
+        }),
+        prisma.passwordResetToken.update({
+          where: { id: resetRecord.id },
+          data: { usedAt: new Date() },
+        }),
+      ]);
+
+      return res.status(200).json({
+        message: 'La contraseña fue restablecida correctamente.',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 export default router;
