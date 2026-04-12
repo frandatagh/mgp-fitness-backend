@@ -11,6 +11,10 @@ import contactRoutes from './routes/contact.js';
 import exerciseCheckinsRoutes from './routes/exercise-checkins.js';
 import routineCheckinRoutes from './routes/routine-checkins.js';
 
+import authRoutes from './routes/auth.js';
+import routineRoutes from './routes/routines.js';
+import contactRoutes from './routes/contact.js';
+
 const app = express();
 
 app.set('etag', false);
