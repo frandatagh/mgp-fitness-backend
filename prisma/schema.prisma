@@ -21,6 +21,7 @@ model User {
   profile             UserProfile?
   exerciseCheckins    ExerciseCheckin[]
   routineCheckins     RoutineCheckin[]
+  runSessions         RunSession[]
 }
 
 model Routine {
@@ -141,4 +142,22 @@ model RoutineCheckin {
   @@unique([userId, routineId, trackedDate])
   @@index([userId, trackedDate])
   @@index([routineId, trackedDate])
+}
+
+model RunSession {
+  id              String   @id @default(cuid())
+  userId          String
+  startedAt       DateTime
+  endedAt         DateTime
+  durationSeconds Int
+  distanceMeters  Float
+  avgPaceSecPerKm Float?
+  maxSpeedMps     Float?
+  pathGeoJson     Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
