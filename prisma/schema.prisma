@@ -19,18 +19,23 @@ model User {
   updatedAt           DateTime             @updatedAt
   passwordResetTokens PasswordResetToken[]
   profile             UserProfile?
+  exerciseCheckins    ExerciseCheckin[]
+  routineCheckins     RoutineCheckin[]
+  runSessions         RunSession[]
 }
 
 model Routine {
-  id         String     @id @default(cuid())
-  title      String
-  notes      String?
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId     String
-  exercises  Exercise[]
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
-  lastDoneAt DateTime?
+  id               String            @id @default(cuid())
+  title            String
+  notes            String?
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId           String
+  exercises        Exercise[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  lastDoneAt       DateTime?
+  exerciseCheckins ExerciseCheckin[]
+  routineCheckins  RoutineCheckin[]
 
   @@index([userId])
 }
@@ -47,7 +52,8 @@ model Exercise {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  order Int @default(0)
+  order            Int               @default(0)
+  exerciseCheckins ExerciseCheckin[]
 
   @@index([routineId])
   @@index([routineId, order])
@@ -98,4 +104,60 @@ model UserProfile {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model ExerciseCheckin {
+  id          String   @id @default(cuid())
+  userId      String
+  routineId   String
+  exerciseId  String
+  score       Int
+  notes       String?
+  trackedDate String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  routine  Routine  @relation(fields: [routineId], references: [id], onDelete: Cascade)
+  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, exerciseId, trackedDate])
+  @@index([userId, trackedDate])
+  @@index([exerciseId, trackedDate])
+  @@index([routineId, trackedDate])
+}
+
+model RoutineCheckin {
+  id          String   @id @default(cuid())
+  userId      String
+  routineId   String
+  score       Int
+  trackedDate String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  routine Routine @relation(fields: [routineId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, routineId, trackedDate])
+  @@index([userId, trackedDate])
+  @@index([routineId, trackedDate])
+}
+
+model RunSession {
+  id              String   @id @default(cuid())
+  userId          String
+  startedAt       DateTime
+  endedAt         DateTime
+  durationSeconds Int
+  distanceMeters  Float
+  avgPaceSecPerKm Float?
+  maxSpeedMps     Float?
+  pathGeoJson     Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }

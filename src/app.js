@@ -8,10 +8,11 @@ import profileRoutes from './routes/profile.js';
 import authRoutes from './routes/auth.js';
 import routineRoutes from './routes/routines.js';
 import contactRoutes from './routes/contact.js';
+import exerciseCheckinsRoutes from './routes/exercise-checkins.js';
+import routineCheckinRoutes from './routes/routine-checkins.js';
+import runSessionRoutes from './routes/run-sessions.js';
+import routingRoutes from './routes/routing.js';
 
-import authRoutes from './routes/auth.js';
-import routineRoutes from './routes/routines.js';
-import contactRoutes from './routes/contact.js';
 
 const app = express();
 
@@ -47,6 +48,10 @@ app.use('/api/auth', authRoutes);
 app.use('/api/routines', routineRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/profile', profileRoutes);
+app.use('/api/exercises', exerciseCheckinsRoutes);
+app.use('/api/routines', routineCheckinRoutes);
+app.use('/api/run-sessions', runSessionRoutes);
+app.use('/api/routing', routingRoutes);
 
 // 404
 app.use((req, res) => {
