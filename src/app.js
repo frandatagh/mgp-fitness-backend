@@ -98,4 +98,11 @@ app.use((err, req, res, next) => {
   res.status(status).json({ message });
 });
 
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok',
+    service: 'mgp-fitness-backend',
+   });
+});
+
 export default app;
