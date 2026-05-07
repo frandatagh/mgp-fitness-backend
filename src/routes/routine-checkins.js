@@ -69,4 +69,30 @@ router.post(
   }
 );
 
+router.delete('/:id', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const checkin = await prisma.routineCheckin.findFirst({
+      where: {
+        id,
+        userId: req.user.id,
+      },
+    });
+
+    if (!checkin) {
+      return res.status(404).json({ message: 'Registro no encontrado' });
+    }
+
+    await prisma.routineCheckin.delete({
+      where: { id },
+    });
+
+    return res.json({ message: 'Registro eliminado correctamente' });
+  } catch (error) {
+    console.error('Error borrando valoración de rutina:', error);
+    return res.status(500).json({ message: 'Error interno al borrar registro' });
+  }
+});
+
 export default router;

@@ -12,6 +12,8 @@ import exerciseCheckinsRoutes from './routes/exercise-checkins.js';
 import routineCheckinRoutes from './routes/routine-checkins.js';
 import runSessionRoutes from './routes/run-sessions.js';
 import routingRoutes from './routes/routing.js';
+import statisticsRoutes from './routes/statistics.js';
+import statisticsHistoryRoutes from './routes/statistics-history.js';
 
 
 const app = express();
@@ -52,6 +54,8 @@ app.use('/api/exercises', exerciseCheckinsRoutes);
 app.use('/api/routines', routineCheckinRoutes);
 app.use('/api/run-sessions', runSessionRoutes);
 app.use('/api/routing', routingRoutes);
+app.use('/api/statistics', statisticsRoutes);
+app.use('/api/statistics/history', statisticsHistoryRoutes);
 
 // 404
 app.use((req, res) => {

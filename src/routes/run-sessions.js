@@ -94,4 +94,48 @@ router.delete('/:id', verifyToken, async (req, res, next) => {
   }
 });
 
+router.patch('/:id/rating', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rating } = req.body;
+
+    const numericRating = Number(rating);
+
+    if (!Number.isInteger(numericRating) || numericRating < 1 || numericRating > 10) {
+      return res.status(400).json({
+        message: 'La valoración debe ser un número entero entre 1 y 10',
+      });
+    }
+
+    const session = await prisma.runSession.findFirst({
+      where: {
+        id,
+        userId: req.user.id,
+      },
+    });
+
+    if (!session) {
+      return res.status(404).json({
+        message: 'Sesión no encontrada',
+      });
+    }
+
+    const updatedSession = await prisma.runSession.update({
+      where: { id },
+      data: {
+        rating: numericRating,
+      },
+    });
+
+    return res.json({
+      item: updatedSession,
+    });
+  } catch (error) {
+    console.error('Error valorando sesión:', error);
+    return res.status(500).json({
+      message: 'Error interno al guardar la valoración',
+    });
+  }
+});
+
 export default router;
