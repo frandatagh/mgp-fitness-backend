@@ -57,6 +57,13 @@ app.use('/api/routing', routingRoutes);
 app.use('/api/statistics', statisticsRoutes);
 app.use('/api/statistics/history', statisticsHistoryRoutes);
 
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok',
+    service: 'mgp-fitness-backend',
+   });
+});
+
 // 404
 app.use((req, res) => {
   res.status(404).json({ message: 'Not found' });
@@ -98,11 +105,6 @@ app.use((err, req, res, next) => {
   res.status(status).json({ message });
 });
 
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok',
-    service: 'mgp-fitness-backend',
-   });
-});
+
 
 export default app;
