@@ -4,13 +4,35 @@ import helmet from 'helmet';
 import cors from 'cors';
 import morgan from 'morgan';
 import prisma from './config/prismaClient.js';
+import profileRoutes from './routes/profile.js';
+import authRoutes from './routes/auth.js';
+import routineRoutes from './routes/routines.js';
+import contactRoutes from './routes/contact.js';
+import exerciseCheckinsRoutes from './routes/exercise-checkins.js';
+import routineCheckinRoutes from './routes/routine-checkins.js';
+import runSessionRoutes from './routes/run-sessions.js';
+import routingRoutes from './routes/routing.js';
+import statisticsRoutes from './routes/statistics.js';
+import statisticsHistoryRoutes from './routes/statistics-history.js';
+
 
 const app = express();
 
+app.set('etag', false);
+
+const corsOptions = {
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+app.use(cors(corsOptions));
+
+
 app.use(helmet());
-app.use(cors());
 app.use(morgan('dev'));
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
+app.use('/api/routines/import/csv', express.text({ type: '*/*', limit: '1mb' }));
 
 // ✅ Ruta de prueba para verificar conexión con Prisma
 app.get('/test-db', async (req, res) => {
@@ -23,63 +45,64 @@ app.get('/test-db', async (req, res) => {
   }
 });
 
-// ✅ Rutas reales (dejar los placeholders hasta que las creemos)
-import authRoutes from './routes/auth.js';
-import routineRoutes from './routes/routines.js';
-
+// ✅ Rutas reales
 app.use('/api/auth', authRoutes);
 app.use('/api/routines', routineRoutes);
+app.use('/api/contact', contactRoutes);
+app.use('/api/profile', profileRoutes);
+app.use('/api/exercises', exerciseCheckinsRoutes);
+app.use('/api/routines', routineCheckinRoutes);
+app.use('/api/run-sessions', runSessionRoutes);
+app.use('/api/routing', routingRoutes);
+app.use('/api/statistics', statisticsRoutes);
+app.use('/api/statistics/history', statisticsHistoryRoutes);
 
-// ✅ Manejador de errores global
-// 404 si ninguna ruta matchea (poner antes del handler de errores)
+// 404
 app.use((req, res) => {
-  res.status(404).json({ message: "Not found" });
+  res.status(404).json({ message: 'Not found' });
 });
 
-// Handler de errores global (último middleware)
+// Handler de errores global
 app.use((err, req, res, next) => {
-  // 1) JSON inválido (body-parser)
-  // express.json() lanza SyntaxError con estas props cuando el JSON está malformado
-  if (err?.type === "entity.parse.failed" || (err instanceof SyntaxError && "body" in err)) {
-    return res.status(400).json({ message: "Invalid JSON payload" });
+  if (err?.type === 'entity.parse.failed' || (err instanceof SyntaxError && 'body' in err)) {
+    return res.status(400).json({ message: 'Invalid JSON payload' });
   }
 
-  // 2) Errores de validación (Zod)
   if (err?.statusCode === 400 && Array.isArray(err.details)) {
-    return res.status(400).json({ message: "Validation failed", details: err.details });
+    return res.status(400).json({ message: 'Validation failed', details: err.details });
   }
 
-  // 3) JWT inválido/expirado
-  if (err?.name === "JsonWebTokenError") {
-    return res.status(401).json({ message: "Invalid token" });
-  }
-  if (err?.name === "TokenExpiredError") {
-    return res.status(401).json({ message: "Token expired" });
+  if (err?.name === 'JsonWebTokenError') {
+    return res.status(401).json({ message: 'Invalid token' });
   }
 
-  // 4) Prisma (unicidad / no encontrado)
-  // P2002: unique constraint (ej. email duplicado)
-  if (err?.code === "P2002") {
-    return res.status(409).json({ message: "Unique constraint violated" });
-  }
-  // P2025: record not found (útil si actualizas/eliminás por where y no existe)
-  if (err?.code === "P2025") {
-    return res.status(404).json({ message: "Record not found" });
+  if (err?.name === 'TokenExpiredError') {
+    return res.status(401).json({ message: 'Token expired' });
   }
 
-  // 5) Si algún handler setea err.statusCode / err.status, respétalo
+  if (err?.code === 'P2002') {
+    return res.status(409).json({ message: 'Unique constraint violated' });
+  }
+
+  if (err?.code === 'P2025') {
+    return res.status(404).json({ message: 'Record not found' });
+  }
+
   const status = err.statusCode || err.status || 500;
+  const message = err.message || 'Internal server error';
 
-  // 6) Mensaje genérico (evitar exponer detalles en prod)
-  const message = err.message || "Internal server error";
-
-  // Log interno (en prod podrías usar un logger)
-  if (process.env.NODE_ENV !== "test") {
+  if (process.env.NODE_ENV !== 'test') {
     console.error(err);
   }
 
   res.status(status).json({ message });
 });
 
-export default app;
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok',
+    service: 'mgp-fitness-backend',
+   });
+});
 
+export default app;
