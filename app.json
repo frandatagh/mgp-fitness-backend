@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "c94468ab-cc00-4554-bf24-5a1050aa3ae3"
+      }
+    },
+    "android": {
+      "package": "com.mgprutinafitness.mgpfitnessbackend"
+    }
+  }
+}
