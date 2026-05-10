@@ -206,22 +206,56 @@ router.put(
           });
 
           // crear los nuevos (si hay)
-          if (exercises.length > 0) {
-            await tx.exercise.createMany({
-              data: exercises.map((ex, index) => ({
-                name: ex.name,
-                sets: ex.sets ?? null,
-                reps: ex.reps ?? null,
-                notes: ex.notes ?? null,
-                day: ex.day ?? null,
-                order:
-                  typeof ex.order === "number"
-                    ? ex.order
-                    : index,          // fallback si no mandás order
-                routineId,
-              })),
-            });
-          }
+          if (Array.isArray(exercises)) {
+  const existingExercises = await tx.exercise.findMany({
+    where: { routineId },
+    select: { id: true },
+  });
+
+  const existingIds = existingExercises.map((ex) => ex.id);
+
+  const incomingExistingIds = exercises
+    .map((ex) => ex.id)
+    .filter((id) => typeof id === "string" && id.length > 0);
+
+  const idsToDelete = existingIds.filter(
+    (existingId) => !incomingExistingIds.includes(existingId)
+  );
+
+  if (idsToDelete.length > 0) {
+    await tx.exercise.deleteMany({
+      where: {
+        routineId,
+        id: { in: idsToDelete },
+      },
+    });
+  }
+
+  for (const [index, ex] of exercises.entries()) {
+    const data = {
+      name: ex.name,
+      sets: ex.sets ?? null,
+      reps: ex.reps ?? null,
+      notes: ex.notes ?? null,
+      day: ex.day ?? null,
+      order: typeof ex.order === "number" ? ex.order : index,
+    };
+
+    if (ex.id && existingIds.includes(ex.id)) {
+      await tx.exercise.update({
+        where: { id: ex.id },
+        data,
+      });
+    } else {
+      await tx.exercise.create({
+        data: {
+          ...data,
+          routineId,
+        },
+      });
+    }
+  }
+}
         }
 
         // 2.c) devolver la rutina ya con ejercicios actualizados
