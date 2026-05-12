@@ -56,6 +56,8 @@ app.use('/api/run-sessions', runSessionRoutes);
 app.use('/api/routing', routingRoutes);
 app.use('/api/statistics', statisticsRoutes);
 app.use('/api/statistics/history', statisticsHistoryRoutes);
+app.use('/api/exercise-checkins', exerciseCheckinsRoutes);
+app.use('/api/routine-checkins', routineCheckinRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ 
