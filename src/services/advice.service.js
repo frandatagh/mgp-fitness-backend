@@ -98,6 +98,77 @@ const ADVICE_BANK = {
   type: 'training',
   priority: 86,
   },
+    neutralRestBetter: {
+    id: 'neutral-rest-better',
+    title: 'Descansá para rendir mejor',
+    description:
+      'Recordá descansar bien para volver a tu rutina con más energía. Muchas veces una buena recuperación mejora más que forzar otra serie.',
+    type: 'recovery',
+    priority: 58,
+  },
+
+  neutralTryTomorrow: {
+    id: 'neutral-try-tomorrow',
+    title: 'Mañana podés intentarlo mejor',
+    description:
+      'Si sentís que podías dar un poco más, no lo fuerces hoy. Descansá, recuperate y volvé a intentarlo con mejor forma en la próxima sesión.',
+    type: 'recovery',
+    priority: 57,
+  },
+
+  neutralProcess: {
+    id: 'neutral-process',
+    title: 'Todo es un proceso',
+    description:
+      'El progreso no siempre se nota en una sola sesión. Escuchá tu cuerpo, mantené la calma y seguí construyendo constancia.',
+    type: 'habit',
+    priority: 56,
+  },
+
+  neutralTechnique: {
+    id: 'neutral-technique',
+    title: 'Vas bien: cuidá la técnica',
+    description:
+      'Tus registros no muestran una alerta importante. Seguí así, pero poné mucha atención en la técnica y en la calidad de cada movimiento.',
+    type: 'training',
+    priority: 59,
+  },
+
+  neutralConsistency: {
+    id: 'neutral-consistency',
+    title: 'La constancia también cuenta',
+    description:
+      'No todos los días tienen que ser extraordinarios. Sostener el hábito con equilibrio también es una forma real de progreso.',
+    type: 'habit',
+    priority: 55,
+  },
+
+  neutralWarmup: {
+    id: 'neutral-warmup',
+    title: 'No saltees la entrada en calor',
+    description:
+      'Aunque el entrenamiento sea moderado, prepará el cuerpo con movilidad y precalentamiento. Eso ayuda a entrenar mejor y con más seguridad.',
+    type: 'training',
+    priority: 54,
+  },
+
+  neutralHydration: {
+    id: 'neutral-hydration',
+    title: 'Cuidá la hidratación',
+    description:
+      'Un rendimiento normal también depende de hábitos simples. Tomar agua antes y después de entrenar puede ayudarte a sentirte mejor.',
+    type: 'nutrition',
+    priority: 53,
+  },
+
+  neutralStretch: {
+    id: 'neutral-stretch',
+    title: 'Terminá con movilidad suave',
+    description:
+      'Después de entrenar, dedicá unos minutos a estirar o hacer movilidad tranquila. Es una buena forma de cerrar la sesión y favorecer la recuperación.',
+    type: 'recovery',
+    priority: 52,
+  },
 };
 
 function uniqueAdvice(items) {
@@ -110,6 +181,27 @@ function uniqueAdvice(items) {
   });
 
   return Array.from(map.values());
+}
+
+function pickNeutralAdvice(seed = 0) {
+  const neutralItems = [
+    ADVICE_BANK.neutralTechnique,
+    ADVICE_BANK.neutralRestBetter,
+    ADVICE_BANK.neutralTryTomorrow,
+    ADVICE_BANK.neutralProcess,
+    ADVICE_BANK.neutralConsistency,
+    ADVICE_BANK.neutralWarmup,
+    ADVICE_BANK.neutralHydration,
+    ADVICE_BANK.neutralStretch,
+  ];
+
+  const startIndex = Math.abs(seed) % neutralItems.length;
+
+  return [
+    neutralItems[startIndex],
+    neutralItems[(startIndex + 3) % neutralItems.length],
+    neutralItems[(startIndex + 5) % neutralItems.length],
+  ];
 }
 
 function areBothLow(values) {
@@ -202,6 +294,11 @@ export async function buildUserAdvice(prisma, userId) {
     .filter((record) => Number.isFinite(record.rating))
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+
+    const neutralSeed = recentRatedRecords.reduce((sum, record) => {
+    return sum + Math.round(record.rating * 10);
+  }, recentRatedRecords.length);
+
   const lastTwoRatings = recentRatedRecords
     .slice(0, 2)
     .map((record) => record.rating);
@@ -278,10 +375,8 @@ export async function buildUserAdvice(prisma, userId) {
 // porque el modelo exerciseCheckin requiere score obligatorio.
 // Esta regla se puede implementar más adelante desde otro dato.
 
-  if (advice.length === 0) {
-    advice.push(ADVICE_BANK.softRuns);
-    advice.push(ADVICE_BANK.restIsTraining);
-    advice.push(ADVICE_BANK.registerMore);
+    if (advice.length === 0) {
+    advice.push(...pickNeutralAdvice(neutralSeed));
   }
 
   return uniqueAdvice(advice)
