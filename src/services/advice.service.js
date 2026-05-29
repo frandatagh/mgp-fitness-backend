@@ -151,38 +151,28 @@ export async function buildUserAdvice(prisma, userId) {
   const advice = [];
 
   const [
-    runSessions,
-    routineCheckins,
-    exerciseCheckins,
-    recentExerciseCheckinsWithoutScore,
-  ] = await Promise.all([
-    prisma.runSession.findMany({
-      where: { userId },
-      orderBy: { startedAt: 'desc' },
-      take: 10,
-    }),
+  runSessions,
+  routineCheckins,
+  exerciseCheckins,
+] = await Promise.all([
+  prisma.runSession.findMany({
+    where: { userId },
+    orderBy: { startedAt: 'desc' },
+    take: 10,
+  }),
 
-    prisma.routineCheckin.findMany({
-      where: { userId },
-      orderBy: { trackedDate: 'desc' },
-      take: 10,
-    }),
+  prisma.routineCheckin.findMany({
+    where: { userId },
+    orderBy: { trackedDate: 'desc' },
+    take: 10,
+  }),
 
-    prisma.exerciseCheckin.findMany({
-      where: { userId },
-      orderBy: { trackedDate: 'desc' },
-      take: 20,
-    }),
-
-    prisma.exerciseCheckin.findMany({
-      where: {
-        userId,
-        score: null,
-      },
-      orderBy: { trackedDate: 'desc' },
-      take: 5,
-    }),
-  ]);
+  prisma.exerciseCheckin.findMany({
+    where: { userId },
+    orderBy: { trackedDate: 'desc' },
+    take: 20,
+  }),
+]);
 
   const normalizedRuns = runSessions
     .map(normalizeRunSession)
@@ -276,9 +266,9 @@ export async function buildUserAdvice(prisma, userId) {
     advice.push(ADVICE_BANK.restIsTraining);
   }
 
-  if (recentExerciseCheckinsWithoutScore.length >= 2) {
-    advice.push(ADVICE_BANK.rateExercises);
-  }
+  // Por ahora no podemos detectar ejercicios sin valoración,
+// porque el modelo exerciseCheckin requiere score obligatorio.
+// Esta regla se puede implementar más adelante desde otro dato.
 
   if (advice.length === 0) {
     advice.push(ADVICE_BANK.softRuns);
