@@ -14,6 +14,15 @@ const routineIdParamsSchema = z.object({
   id: z.string().min(1),
 });
 
+function getArgentinaDateKey(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
 router.post(
   '/:id/checkin',
   verifyToken,
@@ -38,7 +47,7 @@ router.post(
         });
       }
 
-      const trackedDate = new Date().toISOString().slice(0, 10);
+      const trackedDate = getArgentinaDateKey();
 
       const checkin = await prisma.routineCheckin.upsert({
         where: {
