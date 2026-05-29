@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { verifyToken } from '../middlewares/auth.js';
+import { buildUserAdvice } from '../services/advice.service.js';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -429,6 +430,22 @@ router.get('/me', verifyToken, async (req, res) => {
     console.error('Error obteniendo estadísticas:', error);
     return res.status(500).json({
       message: 'Error interno obteniendo estadísticas',
+    });
+  }
+});
+
+router.get('/advice', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const items = await buildUserAdvice(prisma, userId);
+
+    return res.json({ items });
+  } catch (error) {
+    console.error('Error obteniendo consejos:', error);
+
+    return res.status(500).json({
+      message: 'Error interno obteniendo consejos',
     });
   }
 });

@@ -51,7 +51,7 @@ router.post(
         });
       }
 
-      const trackedDate = new Date().toISOString().slice(0, 10);
+      const trackedDate = getArgentinaDateKey();
 
 const checkin = await prisma.exerciseCheckin.upsert({
   where: {

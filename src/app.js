@@ -66,13 +66,6 @@ app.get('/api/health', (req, res) => {
    });
 });
 
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok',
-    service: 'mgp-fitness-backend',
-   });
-});
-
 // 404
 app.use((req, res) => {
   res.status(404).json({ message: 'Not found' });
