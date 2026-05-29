@@ -90,6 +90,14 @@ const ADVICE_BANK = {
     type: 'habit',
     priority: 60,
   },
+  reasonableProgression: {
+  id: 'reasonable-progression',
+  title: 'Mantené una progresión razonable',
+  description:
+    'Subir peso, series o dificultad debe hacerse gradualmente. Si el esfuerzo se dispara de golpe, probablemente la progresión fue demasiado brusca.',
+  type: 'training',
+  priority: 86,
+  },
 };
 
 function uniqueAdvice(items) {
@@ -221,7 +229,6 @@ export async function buildUserAdvice(prisma, userId) {
   }
 
   if (areBothHigh(lastTwoRatings)) {
-    advice.push(ADVICE_BANK.fatigueWarning);
     advice.push(ADVICE_BANK.restIsTraining);
   }
 
@@ -259,6 +266,7 @@ export async function buildUserAdvice(prisma, userId) {
   if (areBothLow(lastTwoTrainingRatings)) {
     advice.push(ADVICE_BANK.rethinkRoutine);
     advice.push(ADVICE_BANK.restIsTraining);
+    advice.push(ADVICE_BANK.reasonableProgression);
   }
 
   if (areBothHigh(lastTwoTrainingRatings)) {
