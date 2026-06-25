@@ -17,9 +17,9 @@ export const profileUpdateSchema = z.object({
     .union([z.string().datetime(), z.null()])
     .optional(),
 
- profileImageUrl: z
-  .union([z.string().trim().url(), z.string().trim().length(0), z.null()])
-  .optional(),
+  profileImageUrl: z
+    .union([z.string().trim().url(), z.string().trim().length(0), z.null()])
+    .optional(),
 
   planType: z
     .enum(['standard', 'pro', 'professional'])
@@ -27,5 +27,25 @@ export const profileUpdateSchema = z.object({
 
   weeklyKmGoal: z
     .union([z.number(), z.null()])
+    .optional(),
+
+  // Objetivo principal del usuario
+  mainGoalType: z
+    .enum(['running', 'routine'])
+    .nullable()
+    .optional(),
+
+  mainGoalPeriod: z
+    .enum(['weekly', 'monthly'])
+    .nullable()
+    .optional(),
+
+  mainGoalMetric: z
+    .enum(['distance_km', 'sessions', 'minutes', 'avg_effort'])
+    .nullable()
+    .optional(),
+
+  mainGoalTarget: z
+    .union([z.number().positive(), z.null()])
     .optional(),
 });
