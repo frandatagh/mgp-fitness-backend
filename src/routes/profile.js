@@ -77,6 +77,10 @@ router.patch('/me', verifyToken, validate(profileUpdateSchema), async (req, res,
       profileImageUrl,
       planType,
       weeklyKmGoal,
+      mainGoalType,
+      mainGoalPeriod,
+      mainGoalMetric,
+      mainGoalTarget,
     } = req.body;
 
     const existingUser = await prisma.user.findUnique({
@@ -101,35 +105,70 @@ router.patch('/me', verifyToken, validate(profileUpdateSchema), async (req, res,
     }
 
     // Crear o actualizar perfil
-    const updatedProfile = await prisma.userProfile.upsert({
-      where: { userId: authUserId },
-      create: {
-        userId: authUserId,
-        goal: typeof goal !== 'undefined' ? goal : null,
-        heightCm: typeof heightCm !== 'undefined' ? heightCm : null,
-        weightKg: typeof weightKg !== 'undefined' ? weightKg : null,
-        birthDate: typeof birthDate !== 'undefined' && birthDate ? new Date(birthDate) : null,
-        profileImageUrl:
-          typeof profileImageUrl !== 'undefined'
-            ? profileImageUrl || null
-            : null,
-        planType: planType ?? 'standard',
-        weeklyKmGoal: typeof weeklyKmGoal !== 'undefined' ? weeklyKmGoal : null,
-      },
-      update: {
-        ...(typeof goal !== 'undefined' ? { goal } : {}),
-        ...(typeof heightCm !== 'undefined' ? { heightCm } : {}),
-        ...(typeof weightKg !== 'undefined' ? { weightKg } : {}),
-        ...(typeof birthDate !== 'undefined'
-          ? { birthDate: birthDate ? new Date(birthDate) : null }
-          : {}),
-        ...(typeof profileImageUrl !== 'undefined'
-          ? { profileImageUrl: profileImageUrl || null }
-          : {}),
-        ...(typeof planType !== 'undefined' ? { planType } : {}),
-        ...(typeof weeklyKmGoal !== 'undefined' ? { weeklyKmGoal } : {}),
-      },
-    });
+const updatedProfile = await prisma.userProfile.upsert({
+  where: { userId: authUserId },
+  create: {
+    userId: authUserId,
+    goal: typeof goal !== 'undefined' ? goal : null,
+    heightCm: typeof heightCm !== 'undefined' ? heightCm : null,
+    weightKg: typeof weightKg !== 'undefined' ? weightKg : null,
+    birthDate:
+      typeof birthDate !== 'undefined' && birthDate
+        ? new Date(birthDate)
+        : null,
+    profileImageUrl:
+      typeof profileImageUrl !== 'undefined'
+        ? profileImageUrl || null
+        : null,
+    planType: planType ?? 'standard',
+    weeklyKmGoal: typeof weeklyKmGoal !== 'undefined' ? weeklyKmGoal : null,
+
+    // Objetivo principal
+    mainGoalType:
+      typeof mainGoalType !== 'undefined'
+        ? mainGoalType
+        : null,
+    mainGoalPeriod:
+      typeof mainGoalPeriod !== 'undefined'
+        ? mainGoalPeriod
+        : null,
+    mainGoalMetric:
+      typeof mainGoalMetric !== 'undefined'
+        ? mainGoalMetric
+        : null,
+    mainGoalTarget:
+      typeof mainGoalTarget !== 'undefined'
+        ? mainGoalTarget
+        : null,
+  },
+  update: {
+    ...(typeof goal !== 'undefined' ? { goal } : {}),
+    ...(typeof heightCm !== 'undefined' ? { heightCm } : {}),
+    ...(typeof weightKg !== 'undefined' ? { weightKg } : {}),
+    ...(typeof birthDate !== 'undefined'
+      ? { birthDate: birthDate ? new Date(birthDate) : null }
+      : {}),
+    ...(typeof profileImageUrl !== 'undefined'
+      ? { profileImageUrl: profileImageUrl || null }
+      : {}),
+    ...(typeof planType !== 'undefined' ? { planType } : {}),
+    ...(typeof weeklyKmGoal !== 'undefined' ? { weeklyKmGoal } : {}),
+
+    // Objetivo principal
+    ...(typeof mainGoalType !== 'undefined'
+      ? { mainGoalType }
+      : {}),
+    ...(typeof mainGoalPeriod !== 'undefined'
+      ? { mainGoalPeriod }
+      : {}),
+    ...(typeof mainGoalMetric !== 'undefined'
+      ? { mainGoalMetric }
+      : {}),
+    ...(typeof mainGoalTarget !== 'undefined'
+      ? { mainGoalTarget }
+      : {}),
+  },
+});
 
     return res.json({
       message: 'Perfil actualizado correctamente',
