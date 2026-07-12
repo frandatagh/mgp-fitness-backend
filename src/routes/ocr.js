@@ -49,10 +49,12 @@ function safeExtractBox(metadata, box) {
 
   const left = Math.max(0, Math.floor(imageWidth * box.left));
   const top = Math.max(0, Math.floor(imageHeight * box.top));
+
   const width = Math.min(
     imageWidth - left,
     Math.floor(imageWidth * box.width)
   );
+
   const height = Math.min(
     imageHeight - top,
     Math.floor(imageHeight * box.height)
@@ -66,53 +68,82 @@ function safeExtractBox(metadata, box) {
   };
 }
 
-async function preprocessImage(buffer, mode = 'highContrast') {
-  let image = sharp(buffer)
+async function preprocessImage(buffer) {
+  return sharp(buffer)
     .rotate()
     .resize({
-      width: 2800,
+      width: 2200,
       withoutEnlargement: false,
     })
     .grayscale()
-    .normalize();
-
-  if (mode === 'highContrast') {
-    image = image.linear(1.45, -25).sharpen();
-  }
-
-  if (mode === 'thresholdSoft') {
-    image = image.threshold(150).sharpen();
-  }
-
-  if (mode === 'thresholdStrong') {
-    image = image.threshold(180).sharpen();
-  }
-
-  if (mode === 'grayscale') {
-    image = image.sharpen();
-  }
-
-  return image.png().toBuffer();
-}
-
-async function createBaseVariants(buffer) {
-  const original = await sharp(buffer)
-    .rotate()
+    .normalize()
+    .linear(1.35, -20)
+    .sharpen()
     .png()
     .toBuffer();
+}
 
-  const grayscale = await preprocessImage(buffer, 'grayscale');
-  const highContrast = await preprocessImage(buffer, 'highContrast');
-  const thresholdSoft = await preprocessImage(buffer, 'thresholdSoft');
-  const thresholdStrong = await preprocessImage(buffer, 'thresholdStrong');
+async function createImageVariants(buffer) {
+  const metadata = await getImageMetadata(buffer);
 
-  return [
-    { name: 'full_original', buffer: original, psm: '6' },
-    { name: 'full_grayscale', buffer: grayscale, psm: '6' },
-    { name: 'full_highContrast', buffer: highContrast, psm: '6' },
-    { name: 'full_thresholdSoft', buffer: thresholdSoft, psm: '6' },
-    { name: 'full_thresholdStrong', buffer: thresholdStrong, psm: '6' },
+  const fullImage = await preprocessImage(buffer);
+
+  const cropBoxes = [
+    {
+      name: 'table_full',
+      left: 0.07,
+      top: 0.22,
+      width: 0.86,
+      height: 0.58,
+    },
+    {
+      name: 'table_top',
+      left: 0.07,
+      top: 0.22,
+      width: 0.86,
+      height: 0.26,
+    },
+    {
+      name: 'table_middle',
+      left: 0.07,
+      top: 0.38,
+      width: 0.86,
+      height: 0.26,
+    },
+    {
+      name: 'table_bottom',
+      left: 0.07,
+      top: 0.54,
+      width: 0.86,
+      height: 0.26,
+    },
   ];
+
+  const variants = [
+    {
+      name: 'full_highContrast',
+      buffer: fullImage,
+      psm: '6',
+    },
+  ];
+
+  for (const box of cropBoxes) {
+    const extractBox = safeExtractBox(metadata, box);
+
+    const cropBuffer = await sharp(buffer)
+      .rotate()
+      .extract(extractBox)
+      .png()
+      .toBuffer();
+
+    variants.push({
+      name: `${box.name}_highContrast`,
+      buffer: await preprocessImage(cropBuffer),
+      psm: '6',
+    });
+  }
+
+  return variants;
 }
 
 async function createCropVariants(buffer) {
@@ -265,7 +296,7 @@ function normalizeLineForDedup(line) {
 function combineUsefulOcrTexts(results) {
   const sorted = [...results].sort((a, b) => b.score - a.score);
 
-  const selectedResults = sorted.slice(0, 5);
+  const selectedResults = sorted.slice(0, 3);
 
   const lines = [];
 
@@ -275,8 +306,6 @@ function combineUsefulOcrTexts(results) {
       .map((line) => cleanOcrText(line))
       .filter(Boolean);
 
-    lines.push(`--- OCR ${result.name} score ${result.score.toFixed(1)} ---`);
-
     for (const line of resultLines) {
       lines.push(line);
     }
@@ -285,8 +314,6 @@ function combineUsefulOcrTexts(results) {
   const seen = new Set();
 
   const uniqueLines = lines.filter((line) => {
-    if (line.startsWith('--- OCR')) return true;
-
     const key = normalizeLineForDedup(line);
 
     if (!key) return false;
@@ -315,6 +342,8 @@ router.post('/routine-image', upload.single('image'), async (req, res, next) => 
     });
 
     const variants = await createImageVariants(req.file.buffer);
+
+    console.log(`OCR variantes a procesar: ${variants.length}`);
 
     const results = [];
 
