@@ -259,6 +259,8 @@ router.post('/routine-image', upload.single('image'), async (req, res, next) => 
 
     console.log(`OCR variantes a procesar: ${variants.length}`);
 
+    console.log(`OCR variantes a procesar: ${variants.length}`);
+
     const results = [];
 
     for (const variant of variants) {
