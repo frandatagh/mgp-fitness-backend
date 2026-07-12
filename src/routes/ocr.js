@@ -1,5 +1,6 @@
 import express from 'express';
 import multer from 'multer';
+import sharp from 'sharp';
 import tesseract from 'tesseract.js';
 import { verifyToken } from '../middlewares/auth.js';
 
@@ -12,9 +13,39 @@ router.use(verifyToken);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 8 * 1024 * 1024, // 8 MB
+    fileSize: 10 * 1024 * 1024, // 10 MB
   },
 });
+
+async function prepareImageForOcr(buffer) {
+  /**
+   * Preprocesamiento para mejorar OCR:
+   * - rota según metadatos EXIF
+   * - agranda la imagen
+   * - escala de grises
+   * - mejora contraste
+   * - enfoca texto
+   */
+  return sharp(buffer)
+    .rotate()
+    .resize({
+      width: 1800,
+      withoutEnlargement: false,
+    })
+    .grayscale()
+    .normalize()
+    .sharpen()
+    .png()
+    .toBuffer();
+}
+
+function cleanOcrText(text) {
+  return String(text || '')
+    .replace(/\r/g, '\n')
+    .replace(/[ ]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 
 router.post('/routine-image', upload.single('image'), async (req, res, next) => {
   try {
@@ -31,7 +62,9 @@ router.post('/routine-image', upload.single('image'), async (req, res, next) => 
       userId: req.user?.id,
     });
 
-    const result = await recognize(req.file.buffer, 'spa+eng', {
+    const processedImageBuffer = await prepareImageForOcr(req.file.buffer);
+
+    const result = await recognize(processedImageBuffer, 'spa+eng', {
       logger: (message) => {
         if (message.status === 'recognizing text') {
           console.log(
@@ -39,9 +72,15 @@ router.post('/routine-image', upload.single('image'), async (req, res, next) => 
           );
         }
       },
+      tessedit_pageseg_mode: '6',
+      preserve_interword_spaces: '1',
     });
 
-    const rawText = result?.data?.text?.trim() ?? '';
+    const rawText = cleanOcrText(result?.data?.text ?? '');
+
+    console.log('\n================ OCR BACKEND TEXTO ================');
+    console.log(rawText);
+    console.log('================ FIN OCR BACKEND TEXTO ================\n');
 
     return res.json({
       rawText,
