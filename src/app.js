@@ -14,6 +14,7 @@ import runSessionRoutes from './routes/run-sessions.js';
 import routingRoutes from './routes/routing.js';
 import statisticsRoutes from './routes/statistics.js';
 import statisticsHistoryRoutes from './routes/statistics-history.js';
+import ocrRoutes from './routes/ocr.js';
 
 
 const app = express();
@@ -56,6 +57,7 @@ app.use('/api/run-sessions', runSessionRoutes);
 app.use('/api/routing', routingRoutes);
 app.use('/api/statistics', statisticsRoutes);
 app.use('/api/statistics/history', statisticsHistoryRoutes);
+app.use('/api/ocr', ocrRoutes);
 app.use('/api/exercise-checkins', exerciseCheckinsRoutes);
 app.use('/api/routine-checkins', routineCheckinRoutes);
 
