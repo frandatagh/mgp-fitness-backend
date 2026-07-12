@@ -17,56 +17,194 @@ const upload = multer({
   },
 });
 
-async function createImageVariants(buffer) {
+const exerciseWords = [
+  'press',
+  'banca',
+  'inclinado',
+  'aperturas',
+  'jalón',
+  'jalon',
+  'remo',
+  'sentadilla',
+  'prensa',
+  'curl',
+  'bíceps',
+  'biceps',
+  'tríceps',
+  'triceps',
+  'abdominales',
+  'series',
+  'reps',
+  'peso',
+  'kg',
+];
+
+async function getImageMetadata(buffer) {
+  return sharp(buffer).rotate().metadata();
+}
+
+function safeExtractBox(metadata, box) {
+  const imageWidth = metadata.width || 1;
+  const imageHeight = metadata.height || 1;
+
+  const left = Math.max(0, Math.floor(imageWidth * box.left));
+  const top = Math.max(0, Math.floor(imageHeight * box.top));
+  const width = Math.min(
+    imageWidth - left,
+    Math.floor(imageWidth * box.width)
+  );
+  const height = Math.min(
+    imageHeight - top,
+    Math.floor(imageHeight * box.height)
+  );
+
+  return {
+    left,
+    top,
+    width: Math.max(width, 1),
+    height: Math.max(height, 1),
+  };
+}
+
+async function preprocessImage(buffer, mode = 'highContrast') {
+  let image = sharp(buffer)
+    .rotate()
+    .resize({
+      width: 2800,
+      withoutEnlargement: false,
+    })
+    .grayscale()
+    .normalize();
+
+  if (mode === 'highContrast') {
+    image = image.linear(1.45, -25).sharpen();
+  }
+
+  if (mode === 'thresholdSoft') {
+    image = image.threshold(150).sharpen();
+  }
+
+  if (mode === 'thresholdStrong') {
+    image = image.threshold(180).sharpen();
+  }
+
+  if (mode === 'grayscale') {
+    image = image.sharpen();
+  }
+
+  return image.png().toBuffer();
+}
+
+async function createBaseVariants(buffer) {
   const original = await sharp(buffer)
     .rotate()
     .png()
     .toBuffer();
 
-  const grayscale = await sharp(buffer)
-    .rotate()
-    .resize({
-      width: 2400,
-      withoutEnlargement: false,
-    })
-    .grayscale()
-    .normalize()
-    .sharpen()
-    .png()
-    .toBuffer();
-
-  const highContrast = await sharp(buffer)
-    .rotate()
-    .resize({
-      width: 2600,
-      withoutEnlargement: false,
-    })
-    .grayscale()
-    .normalize()
-    .linear(1.35, -20)
-    .sharpen()
-    .png()
-    .toBuffer();
-
-  const threshold = await sharp(buffer)
-    .rotate()
-    .resize({
-      width: 2600,
-      withoutEnlargement: false,
-    })
-    .grayscale()
-    .normalize()
-    .threshold(165)
-    .sharpen()
-    .png()
-    .toBuffer();
+  const grayscale = await preprocessImage(buffer, 'grayscale');
+  const highContrast = await preprocessImage(buffer, 'highContrast');
+  const thresholdSoft = await preprocessImage(buffer, 'thresholdSoft');
+  const thresholdStrong = await preprocessImage(buffer, 'thresholdStrong');
 
   return [
-    { name: 'original', buffer: original },
-    { name: 'grayscale', buffer: grayscale },
-    { name: 'highContrast', buffer: highContrast },
-    { name: 'threshold', buffer: threshold },
+    { name: 'full_original', buffer: original, psm: '6' },
+    { name: 'full_grayscale', buffer: grayscale, psm: '6' },
+    { name: 'full_highContrast', buffer: highContrast, psm: '6' },
+    { name: 'full_thresholdSoft', buffer: thresholdSoft, psm: '6' },
+    { name: 'full_thresholdStrong', buffer: thresholdStrong, psm: '6' },
   ];
+}
+
+async function createCropVariants(buffer) {
+  const metadata = await getImageMetadata(buffer);
+
+  /**
+   * Recortes aproximados pensando en una hoja vertical:
+   * - tabla completa
+   * - parte superior de tabla
+   * - parte central de tabla
+   * - parte inferior de tabla
+   *
+   * No buscamos exactitud perfecta; buscamos darle a Tesseract
+   * zonas más grandes y limpias para leer.
+   */
+  const cropBoxes = [
+    {
+      name: 'crop_table_full',
+      left: 0.08,
+      top: 0.22,
+      width: 0.84,
+      height: 0.58,
+    },
+    {
+      name: 'crop_table_top',
+      left: 0.08,
+      top: 0.22,
+      width: 0.84,
+      height: 0.26,
+    },
+    {
+      name: 'crop_table_middle',
+      left: 0.08,
+      top: 0.38,
+      width: 0.84,
+      height: 0.26,
+    },
+    {
+      name: 'crop_table_bottom',
+      left: 0.08,
+      top: 0.54,
+      width: 0.84,
+      height: 0.26,
+    },
+    {
+      name: 'crop_left_exercises',
+      left: 0.08,
+      top: 0.22,
+      width: 0.38,
+      height: 0.58,
+    },
+    {
+      name: 'crop_right_notes',
+      left: 0.42,
+      top: 0.22,
+      width: 0.50,
+      height: 0.58,
+    },
+  ];
+
+  const variants = [];
+
+  for (const box of cropBoxes) {
+    const extractBox = safeExtractBox(metadata, box);
+
+    const cropBuffer = await sharp(buffer)
+      .rotate()
+      .extract(extractBox)
+      .png()
+      .toBuffer();
+
+    variants.push({
+      name: `${box.name}_highContrast`,
+      buffer: await preprocessImage(cropBuffer, 'highContrast'),
+      psm: '6',
+    });
+
+    variants.push({
+      name: `${box.name}_threshold`,
+      buffer: await preprocessImage(cropBuffer, 'thresholdSoft'),
+      psm: '6',
+    });
+  }
+
+  return variants;
+}
+
+async function createImageVariants(buffer) {
+  const baseVariants = await createBaseVariants(buffer);
+  const cropVariants = await createCropVariants(buffer);
+
+  return [...baseVariants, ...cropVariants];
 }
 
 function cleanOcrText(text) {
@@ -74,44 +212,23 @@ function cleanOcrText(text) {
     .replace(/\r/g, '\n')
     .replace(/[ ]{2,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
+    .replace(/[|¦]/g, '|')
     .trim();
 }
 
 function scoreOcrText(text) {
   const lower = text.toLowerCase();
 
-  const exerciseWords = [
-    'press',
-    'banca',
-    'inclinado',
-    'aperturas',
-    'jalón',
-    'jalon',
-    'remo',
-    'sentadilla',
-    'prensa',
-    'curl',
-    'bíceps',
-    'biceps',
-    'tríceps',
-    'triceps',
-    'abdominales',
-    'series',
-    'reps',
-    'peso',
-  ];
-
   const wordScore = exerciseWords.reduce((total, word) => {
-    return total + (lower.includes(word) ? 5 : 0);
+    return total + (lower.includes(word) ? 7 : 0);
   }, 0);
 
-  const numberScore = (text.match(/\b\d{1,3}\b/g) || []).length;
+  const numberScore = (text.match(/\b\d{1,3}\b/g) || []).length * 1.5;
+  const kgScore = (lower.match(/\bkg\b/g) || []).length * 5;
+  const rowScore = (text.match(/\b\d{1,2}\s*[\.\)]/g) || []).length * 4;
+  const lengthScore = Math.min(text.length / 70, 25);
 
-  const kgScore = (lower.match(/\bkg\b/g) || []).length * 3;
-
-  const lengthScore = Math.min(text.length / 80, 20);
-
-  return wordScore + numberScore + kgScore + lengthScore;
+  return wordScore + numberScore + kgScore + rowScore + lengthScore;
 }
 
 async function runOcrVariant(variant) {
@@ -123,7 +240,7 @@ async function runOcrVariant(variant) {
         );
       }
     },
-    tessedit_pageseg_mode: '6',
+    tessedit_pageseg_mode: variant.psm || '6',
     preserve_interword_spaces: '1',
   });
 
@@ -134,6 +251,52 @@ async function runOcrVariant(variant) {
     rawText,
     score: scoreOcrText(rawText),
   };
+}
+
+function normalizeLineForDedup(line) {
+  return line
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function combineUsefulOcrTexts(results) {
+  const sorted = [...results].sort((a, b) => b.score - a.score);
+
+  const selectedResults = sorted.slice(0, 5);
+
+  const lines = [];
+
+  for (const result of selectedResults) {
+    const resultLines = result.rawText
+      .split(/\n/)
+      .map((line) => cleanOcrText(line))
+      .filter(Boolean);
+
+    lines.push(`--- OCR ${result.name} score ${result.score.toFixed(1)} ---`);
+
+    for (const line of resultLines) {
+      lines.push(line);
+    }
+  }
+
+  const seen = new Set();
+
+  const uniqueLines = lines.filter((line) => {
+    if (line.startsWith('--- OCR')) return true;
+
+    const key = normalizeLineForDedup(line);
+
+    if (!key) return false;
+    if (seen.has(key)) return false;
+
+    seen.add(key);
+    return true;
+  });
+
+  return uniqueLines.join('\n');
 }
 
 router.post('/routine-image', upload.single('image'), async (req, res, next) => {
@@ -157,6 +320,7 @@ router.post('/routine-image', upload.single('image'), async (req, res, next) => 
 
     for (const variant of variants) {
       console.log(`\nProcesando variante OCR: ${variant.name}`);
+
       const result = await runOcrVariant(variant);
 
       console.log(`Resultado variante ${variant.name}: score ${result.score}`);
@@ -165,7 +329,8 @@ router.post('/routine-image', upload.single('image'), async (req, res, next) => 
       results.push(result);
     }
 
-    const bestResult = results.sort((a, b) => b.score - a.score)[0];
+    const bestResult = [...results].sort((a, b) => b.score - a.score)[0];
+    const combinedText = combineUsefulOcrTexts(results);
 
     console.log('\n================ OCR MEJOR RESULTADO ================');
     console.log('Variante:', bestResult.name);
@@ -173,11 +338,16 @@ router.post('/routine-image', upload.single('image'), async (req, res, next) => 
     console.log(bestResult.rawText);
     console.log('================ FIN OCR MEJOR RESULTADO ================\n');
 
+    console.log('\n================ OCR TEXTO COMBINADO ================');
+    console.log(combinedText);
+    console.log('================ FIN OCR TEXTO COMBINADO ================\n');
+
     return res.json({
-      rawText: bestResult.rawText,
+      rawText: combinedText || bestResult.rawText,
       debug: {
-        variant: bestResult.name,
-        score: bestResult.score,
+        bestVariant: bestResult.name,
+        bestScore: bestResult.score,
+        variantsCount: results.length,
       },
     });
   } catch (error) {
