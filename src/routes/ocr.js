@@ -146,6 +146,98 @@ async function createImageVariants(buffer) {
   return variants;
 }
 
+async function createCropVariants(buffer) {
+  const metadata = await getImageMetadata(buffer);
+
+  /**
+   * Recortes aproximados pensando en una hoja vertical:
+   * - tabla completa
+   * - parte superior de tabla
+   * - parte central de tabla
+   * - parte inferior de tabla
+   *
+   * No buscamos exactitud perfecta; buscamos darle a Tesseract
+   * zonas más grandes y limpias para leer.
+   */
+  const cropBoxes = [
+    {
+      name: 'crop_table_full',
+      left: 0.08,
+      top: 0.22,
+      width: 0.84,
+      height: 0.58,
+    },
+    {
+      name: 'crop_table_top',
+      left: 0.08,
+      top: 0.22,
+      width: 0.84,
+      height: 0.26,
+    },
+    {
+      name: 'crop_table_middle',
+      left: 0.08,
+      top: 0.38,
+      width: 0.84,
+      height: 0.26,
+    },
+    {
+      name: 'crop_table_bottom',
+      left: 0.08,
+      top: 0.54,
+      width: 0.84,
+      height: 0.26,
+    },
+    {
+      name: 'crop_left_exercises',
+      left: 0.08,
+      top: 0.22,
+      width: 0.38,
+      height: 0.58,
+    },
+    {
+      name: 'crop_right_notes',
+      left: 0.42,
+      top: 0.22,
+      width: 0.50,
+      height: 0.58,
+    },
+  ];
+
+  const variants = [];
+
+  for (const box of cropBoxes) {
+    const extractBox = safeExtractBox(metadata, box);
+
+    const cropBuffer = await sharp(buffer)
+      .rotate()
+      .extract(extractBox)
+      .png()
+      .toBuffer();
+
+    variants.push({
+      name: `${box.name}_highContrast`,
+      buffer: await preprocessImage(cropBuffer, 'highContrast'),
+      psm: '6',
+    });
+
+    variants.push({
+      name: `${box.name}_threshold`,
+      buffer: await preprocessImage(cropBuffer, 'thresholdSoft'),
+      psm: '6',
+    });
+  }
+
+  return variants;
+}
+
+async function createImageVariants(buffer) {
+  const baseVariants = await createBaseVariants(buffer);
+  const cropVariants = await createCropVariants(buffer);
+
+  return [...baseVariants, ...cropVariants];
+}
+
 function cleanOcrText(text) {
   return String(text || '')
     .replace(/\r/g, '\n')
