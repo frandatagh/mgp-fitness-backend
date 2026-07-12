@@ -103,36 +103,16 @@ async function createFastVariants(buffer) {
     {
       name: 'full_fast',
       buffer: fullImage,
-      psm: '6',
+    },
+    {
+      name: 'table_full_fast',
+      buffer: await preprocessImage(tableFullCrop),
+    },
+    {
+      name: 'table_middle_fast',
+      buffer: await preprocessImage(tableMiddleCrop),
     },
   ];
-
-  for (const box of cropBoxes) {
-    const extractBox = safeExtractBox(metadata, box);
-
-    const cropBuffer = await sharp(buffer)
-      .rotate()
-      .extract(extractBox)
-      .png()
-      .toBuffer();
-
-    variants.push({
-      name: `${box.name}_highContrast`,
-      buffer: await preprocessImage(cropBuffer),
-      psm: '6',
-    });
-  }
-
-  return variants;
-}
-
-function cleanOcrText(text) {
-  return String(text || '')
-    .replace(/\r/g, '\n')
-    .replace(/[ ]{2,}/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .replace(/[|¦]/g, '|')
-    .trim();
 }
 
 function scoreOcrText(text) {
