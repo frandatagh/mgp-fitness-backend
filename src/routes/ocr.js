@@ -13,34 +13,34 @@ router.use(verifyToken);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 10 * 1024 * 1024,
+    fileSize: 8 * 1024 * 1024,
   },
 });
 
-const exerciseWords = [
-  'press',
-  'banca',
-  'inclinado',
-  'aperturas',
-  'jalón',
-  'jalon',
-  'remo',
-  'sentadilla',
-  'prensa',
-  'curl',
-  'bíceps',
-  'biceps',
-  'tríceps',
-  'triceps',
-  'abdominales',
-  'series',
-  'reps',
-  'peso',
-  'kg',
-];
+let isProcessingOcr = false;
 
-async function getImageMetadata(buffer) {
-  return sharp(buffer).rotate().metadata();
+function cleanOcrText(text) {
+  return String(text || '')
+    .replace(/\r/g, '\n')
+    .replace(/[ ]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[|¦]/g, '|')
+    .trim();
+}
+
+async function preprocessImage(buffer) {
+  return sharp(buffer)
+    .rotate()
+    .resize({
+      width: 1800,
+      withoutEnlargement: false,
+    })
+    .grayscale()
+    .normalize()
+    .linear(1.25, -15)
+    .sharpen()
+    .png()
+    .toBuffer();
 }
 
 function safeExtractBox(metadata, box) {
@@ -68,60 +68,40 @@ function safeExtractBox(metadata, box) {
   };
 }
 
-async function preprocessImage(buffer) {
-  return sharp(buffer)
-    .rotate()
-    .resize({
-      width: 2200,
-      withoutEnlargement: false,
-    })
-    .grayscale()
-    .normalize()
-    .linear(1.35, -20)
-    .sharpen()
-    .png()
-    .toBuffer();
-}
-
-async function createImageVariants(buffer) {
-  const metadata = await getImageMetadata(buffer);
+async function createFastVariants(buffer) {
+  const metadata = await sharp(buffer).rotate().metadata();
 
   const fullImage = await preprocessImage(buffer);
 
-  const cropBoxes = [
-    {
-      name: 'table_full',
-      left: 0.07,
-      top: 0.22,
-      width: 0.86,
-      height: 0.58,
-    },
-    {
-      name: 'table_top',
-      left: 0.07,
-      top: 0.22,
-      width: 0.86,
-      height: 0.26,
-    },
-    {
-      name: 'table_middle',
-      left: 0.07,
-      top: 0.38,
-      width: 0.86,
-      height: 0.26,
-    },
-    {
-      name: 'table_bottom',
-      left: 0.07,
-      top: 0.54,
-      width: 0.86,
-      height: 0.26,
-    },
-  ];
+  const tableFullBox = safeExtractBox(metadata, {
+    left: 0.06,
+    top: 0.22,
+    width: 0.88,
+    height: 0.58,
+  });
 
-  const variants = [
+  const tableMiddleBox = safeExtractBox(metadata, {
+    left: 0.06,
+    top: 0.34,
+    width: 0.88,
+    height: 0.42,
+  });
+
+  const tableFullCrop = await sharp(buffer)
+    .rotate()
+    .extract(tableFullBox)
+    .png()
+    .toBuffer();
+
+  const tableMiddleCrop = await sharp(buffer)
+    .rotate()
+    .extract(tableMiddleBox)
+    .png()
+    .toBuffer();
+
+  return [
     {
-      name: 'full_highContrast',
+      name: 'full_fast',
       buffer: fullImage,
       psm: '6',
     },
@@ -146,98 +126,6 @@ async function createImageVariants(buffer) {
   return variants;
 }
 
-async function createCropVariants(buffer) {
-  const metadata = await getImageMetadata(buffer);
-
-  /**
-   * Recortes aproximados pensando en una hoja vertical:
-   * - tabla completa
-   * - parte superior de tabla
-   * - parte central de tabla
-   * - parte inferior de tabla
-   *
-   * No buscamos exactitud perfecta; buscamos darle a Tesseract
-   * zonas más grandes y limpias para leer.
-   */
-  const cropBoxes = [
-    {
-      name: 'crop_table_full',
-      left: 0.08,
-      top: 0.22,
-      width: 0.84,
-      height: 0.58,
-    },
-    {
-      name: 'crop_table_top',
-      left: 0.08,
-      top: 0.22,
-      width: 0.84,
-      height: 0.26,
-    },
-    {
-      name: 'crop_table_middle',
-      left: 0.08,
-      top: 0.38,
-      width: 0.84,
-      height: 0.26,
-    },
-    {
-      name: 'crop_table_bottom',
-      left: 0.08,
-      top: 0.54,
-      width: 0.84,
-      height: 0.26,
-    },
-    {
-      name: 'crop_left_exercises',
-      left: 0.08,
-      top: 0.22,
-      width: 0.38,
-      height: 0.58,
-    },
-    {
-      name: 'crop_right_notes',
-      left: 0.42,
-      top: 0.22,
-      width: 0.50,
-      height: 0.58,
-    },
-  ];
-
-  const variants = [];
-
-  for (const box of cropBoxes) {
-    const extractBox = safeExtractBox(metadata, box);
-
-    const cropBuffer = await sharp(buffer)
-      .rotate()
-      .extract(extractBox)
-      .png()
-      .toBuffer();
-
-    variants.push({
-      name: `${box.name}_highContrast`,
-      buffer: await preprocessImage(cropBuffer, 'highContrast'),
-      psm: '6',
-    });
-
-    variants.push({
-      name: `${box.name}_threshold`,
-      buffer: await preprocessImage(cropBuffer, 'thresholdSoft'),
-      psm: '6',
-    });
-  }
-
-  return variants;
-}
-
-async function createImageVariants(buffer) {
-  const baseVariants = await createBaseVariants(buffer);
-  const cropVariants = await createCropVariants(buffer);
-
-  return [...baseVariants, ...cropVariants];
-}
-
 function cleanOcrText(text) {
   return String(text || '')
     .replace(/\r/g, '\n')
@@ -250,28 +138,50 @@ function cleanOcrText(text) {
 function scoreOcrText(text) {
   const lower = text.toLowerCase();
 
+  const exerciseWords = [
+    'press',
+    'banca',
+    'inclinado',
+    'aperturas',
+    'jalón',
+    'jalon',
+    'remo',
+    'sentadilla',
+    'prensa',
+    'curl',
+    'bíceps',
+    'biceps',
+    'tríceps',
+    'triceps',
+    'abdominales',
+    'kg',
+  ];
+
   const wordScore = exerciseWords.reduce((total, word) => {
-    return total + (lower.includes(word) ? 7 : 0);
+    return total + (lower.includes(word) ? 8 : 0);
   }, 0);
 
   const numberScore = (text.match(/\b\d{1,3}\b/g) || []).length * 1.5;
   const kgScore = (lower.match(/\bkg\b/g) || []).length * 5;
-  const rowScore = (text.match(/\b\d{1,2}\s*[\.\)]/g) || []).length * 4;
-  const lengthScore = Math.min(text.length / 70, 25);
+  const rowScore = (text.match(/\b\d{1,2}\s*[\.\)]/g) || []).length * 5;
 
-  return wordScore + numberScore + kgScore + rowScore + lengthScore;
+  return wordScore + numberScore + kgScore + rowScore;
 }
 
 async function runOcrVariant(variant) {
+  console.log(`Procesando OCR: ${variant.name}`);
+
   const result = await recognize(variant.buffer, 'spa+eng', {
     logger: (message) => {
       if (message.status === 'recognizing text') {
-        console.log(
-          `OCR ${variant.name}: ${Math.round((message.progress || 0) * 100)}%`
-        );
+        const progress = Math.round((message.progress || 0) * 100);
+
+        if (progress === 0 || progress === 50 || progress === 100) {
+          console.log(`OCR ${variant.name}: ${progress}%`);
+        }
       }
     },
-    tessedit_pageseg_mode: variant.psm || '6',
+    tessedit_pageseg_mode: '6',
     preserve_interword_spaces: '1',
   });
 
@@ -293,41 +203,45 @@ function normalizeLineForDedup(line) {
     .trim();
 }
 
-function combineUsefulOcrTexts(results) {
+function combineTexts(results) {
   const sorted = [...results].sort((a, b) => b.score - a.score);
-
-  const selectedResults = sorted.slice(0, 3);
 
   const lines = [];
 
-  for (const result of selectedResults) {
+  for (const result of sorted) {
     const resultLines = result.rawText
       .split(/\n/)
       .map((line) => cleanOcrText(line))
       .filter(Boolean);
 
-    for (const line of resultLines) {
-      lines.push(line);
-    }
+    lines.push(...resultLines);
   }
 
   const seen = new Set();
 
-  const uniqueLines = lines.filter((line) => {
-    const key = normalizeLineForDedup(line);
+  return lines
+    .filter((line) => {
+      const key = normalizeLineForDedup(line);
 
-    if (!key) return false;
-    if (seen.has(key)) return false;
+      if (!key) return false;
+      if (seen.has(key)) return false;
 
-    seen.add(key);
-    return true;
-  });
-
-  return uniqueLines.join('\n');
+      seen.add(key);
+      return true;
+    })
+    .join('\n');
 }
 
 router.post('/routine-image', upload.single('image'), async (req, res, next) => {
+  if (isProcessingOcr) {
+    return res.status(429).json({
+      message: 'Ya hay un escaneo en proceso. Esperá unos segundos e intentá de nuevo.',
+    });
+  }
+
   try {
+    isProcessingOcr = true;
+
     if (!req.file) {
       return res.status(400).json({
         message: 'No se recibió ninguna imagen.',
@@ -341,35 +255,27 @@ router.post('/routine-image', upload.single('image'), async (req, res, next) => 
       userId: req.user?.id,
     });
 
-    const variants = await createImageVariants(req.file.buffer);
+    const variants = await createFastVariants(req.file.buffer);
 
     console.log(`OCR variantes a procesar: ${variants.length}`);
 
     const results = [];
 
     for (const variant of variants) {
-      console.log(`\nProcesando variante OCR: ${variant.name}`);
-
       const result = await runOcrVariant(variant);
 
-      console.log(`Resultado variante ${variant.name}: score ${result.score}`);
+      console.log(`Resultado ${result.name}: score ${result.score}`);
       console.log(result.rawText);
 
       results.push(result);
     }
 
     const bestResult = [...results].sort((a, b) => b.score - a.score)[0];
-    const combinedText = combineUsefulOcrTexts(results);
+    const combinedText = combineTexts(results);
 
-    console.log('\n================ OCR MEJOR RESULTADO ================');
-    console.log('Variante:', bestResult.name);
-    console.log('Score:', bestResult.score);
-    console.log(bestResult.rawText);
-    console.log('================ FIN OCR MEJOR RESULTADO ================\n');
-
-    console.log('\n================ OCR TEXTO COMBINADO ================');
-    console.log(combinedText);
-    console.log('================ FIN OCR TEXTO COMBINADO ================\n');
+    console.log('\n================ OCR TEXTO FINAL ================');
+    console.log(combinedText || bestResult.rawText);
+    console.log('================ FIN OCR TEXTO FINAL ================\n');
 
     return res.json({
       rawText: combinedText || bestResult.rawText,
@@ -382,6 +288,8 @@ router.post('/routine-image', upload.single('image'), async (req, res, next) => 
   } catch (error) {
     console.error('Error procesando OCR:', error);
     next(error);
+  } finally {
+    isProcessingOcr = false;
   }
 });
 
