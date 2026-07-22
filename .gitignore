@@ -142,3 +142,8 @@ vite.config.ts.timestamp-*
 backups/
 *.dump
 *.sql
+
+ocr-service/.venv/
+.venv/
+__pycache__/
+*.pyc
