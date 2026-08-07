@@ -62,7 +62,7 @@ router.post('/routine-image', upload.single('image'), async (req, res, next) => 
 
     const paddleResponse = await axios.post(PADDLE_OCR_URL, formData, {
       headers: formData.getHeaders(),
-      timeout: 120000,
+      timeout: 240000,
       maxBodyLength: Infinity,
       maxContentLength: Infinity,
     });
@@ -87,7 +87,10 @@ router.post('/routine-image', upload.single('image'), async (req, res, next) => 
       response: error.response?.data,
     });
 
-    next(error);
+    return res.status(502).json({
+      message:
+      'El servicio OCR no pudo procesar la imagen en este momento. Puede estar iniciando o sin memoria suficiente. Esperá unos segundos y volvé a intentar.',
+    });
   } finally {
     isProcessingOcr = false;
   }
