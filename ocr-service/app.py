@@ -1,19 +1,14 @@
 import os
 import tempfile
+from statistics import median
 
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from paddleocr import PaddleOCR
 
 
-# Creamos la aplicación FastAPI.
-# Esto es parecido a cuando en Express hacés:
-# const app = express()
 app = FastAPI(title="MGP OCR Service")
 
-
-# Permitimos que otros servicios puedan llamar a este microservicio.
-# En desarrollo lo dejamos abierto con "*".
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,9 +18,6 @@ app.add_middleware(
 )
 
 
-# Creamos una instancia de PaddleOCR.
-# Esto carga el motor OCR una sola vez cuando arranca el servidor.
-# Después cada imagen usa esta misma instancia.
 ocr = PaddleOCR(
     use_doc_orientation_classify=False,
     use_doc_unwarping=False,
@@ -33,9 +25,6 @@ ocr = PaddleOCR(
 )
 
 
-# Ruta simple para comprobar que el servicio está vivo.
-# Cuando entres a http://localhost:8001/health
-# debería responder {"ok": true, ...}
 @app.get("/health")
 def health():
     return {
@@ -45,62 +34,124 @@ def health():
     }
 
 
-# Esta es la ruta principal.
-# Recibe una imagen por FormData con el nombre "file".
-# Ejemplo futuro desde Node:
-# formData.append("file", imagen)
+def get_box_from_result(rec_box=None, rec_poly=None):
+    if rec_box is not None:
+        try:
+            if len(rec_box) == 4:
+                x1, y1, x2, y2 = rec_box
+                return [float(x1), float(y1), float(x2), float(y2)]
+        except Exception:
+            pass
+
+    if rec_poly is not None:
+        try:
+            points = rec_poly.tolist() if hasattr(rec_poly, "tolist") else rec_poly
+
+            xs = [float(point[0]) for point in points]
+            ys = [float(point[1]) for point in points]
+
+            return [min(xs), min(ys), max(xs), max(ys)]
+        except Exception:
+            pass
+
+    return None
+
+
+def sort_items_by_visual_rows(items):
+    items_with_box = [item for item in items if item.get("box")]
+    items_without_box = [item for item in items if not item.get("box")]
+
+    if not items_with_box:
+        return items
+
+    for item in items_with_box:
+        x1, y1, x2, y2 = item["box"]
+        item["centerX"] = (x1 + x2) / 2
+        item["centerY"] = (y1 + y2) / 2
+        item["height"] = max(y2 - y1, 1)
+
+    heights = [item["height"] for item in items_with_box]
+    row_threshold = max(14, median(heights) * 0.85)
+
+    sorted_items = sorted(items_with_box, key=lambda item: item["centerY"])
+
+    rows = []
+
+    for item in sorted_items:
+        inserted = False
+
+        for row in rows:
+            if abs(row["centerY"] - item["centerY"]) <= row_threshold:
+                row["items"].append(item)
+
+                row["centerY"] = sum(
+                    row_item["centerY"] for row_item in row["items"]
+                ) / len(row["items"])
+
+                inserted = True
+                break
+
+        if not inserted:
+            rows.append(
+                {
+                    "centerY": item["centerY"],
+                    "items": [item],
+                }
+            )
+
+    visual_lines = []
+
+    for row in sorted(rows, key=lambda row: row["centerY"]):
+        row_items = sorted(row["items"], key=lambda item: item["centerX"])
+        visual_line = " ".join(item["text"] for item in row_items).strip()
+
+        if visual_line:
+            visual_lines.append(visual_line)
+
+    for item in items_without_box:
+        text = item.get("text", "").strip()
+
+        if text:
+            visual_lines.append(text)
+
+    return visual_lines
+
+
 @app.post("/ocr/routine")
 async def read_routine_image(file: UploadFile = File(...)):
-    # Sacamos la extensión del archivo.
-    # Si no tiene extensión, usamos .jpg por defecto.
     suffix = os.path.splitext(file.filename or "")[1] or ".jpg"
 
-    # Creamos un archivo temporal.
-    # PaddleOCR necesita leer una imagen desde una ruta física.
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
         temp_path = temp_file.name
-
-        # Leemos el contenido binario de la imagen subida.
         content = await file.read()
-
-        # Guardamos la imagen temporalmente en disco.
         temp_file.write(content)
 
     try:
-        # Ejecutamos PaddleOCR sobre la imagen.
-        # Esto devuelve una lista de resultados.
         result = ocr.predict(temp_path)
 
-        texts = []
-        lines = []
+        detected_items = []
 
-        # Recorremos cada resultado detectado.
         for page in result:
             data = None
 
-            # PaddleOCR puede exponer los datos en formato json.
-            # Esta parte intenta obtenerlos de forma segura.
             if hasattr(page, "json"):
                 data = page.json
 
                 if callable(data):
                     data = page.json()
 
-            # Si no se pudo obtener nada, seguimos con la próxima página.
             if not isinstance(data, dict):
                 continue
 
-            # En muchas versiones de PaddleOCR, los textos vienen dentro de "res".
             res = data.get("res", data)
 
             rec_texts = res.get("rec_texts", [])
             rec_scores = res.get("rec_scores", [])
+            rec_boxes = res.get("rec_boxes", [])
+            rec_polys = res.get("rec_polys", [])
 
             for index, text in enumerate(rec_texts):
-                if not text:
-                    continue
-
-                clean_text = str(text).strip()
+                clean_text = str(text or "").strip()
 
                 if not clean_text:
                     continue
@@ -113,26 +164,31 @@ async def read_routine_image(file: UploadFile = File(...)):
                     except Exception:
                         score = None
 
-                texts.append(clean_text)
+                rec_box = rec_boxes[index] if index < len(rec_boxes) else None
+                rec_poly = rec_polys[index] if index < len(rec_polys) else None
 
-                lines.append(
+                box = get_box_from_result(rec_box=rec_box, rec_poly=rec_poly)
+
+                detected_items.append(
                     {
                         "text": clean_text,
                         "score": score,
+                        "box": box,
                     }
                 )
 
-        full_text = "\n".join(texts)
+        visual_lines = sort_items_by_visual_rows(detected_items)
+        full_text = "\n".join(visual_lines)
 
         return {
             "success": True,
             "text": full_text,
-            "lineCount": len(lines),
-            "lines": lines,
+            "lineCount": len(visual_lines),
+            "lines": detected_items,
+            "visualLines": visual_lines,
         }
 
     finally:
-        # Borramos la imagen temporal para no llenar el disco.
         try:
             os.remove(temp_path)
         except Exception:
