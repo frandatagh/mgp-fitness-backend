@@ -5,6 +5,7 @@ from statistics import median
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from paddleocr import PaddleOCR
+from PIL import Image
 
 
 app = FastAPI(title="MGP OCR Service")
@@ -64,7 +65,7 @@ def sort_items_by_visual_rows(items):
     items_without_box = [item for item in items if not item.get("box")]
 
     if not items_with_box:
-        return items
+        return [item.get("text", "").strip() for item in items if item.get("text")]
 
     for item in items_with_box:
         x1, y1, x2, y2 = item["box"]
@@ -119,17 +120,60 @@ def sort_items_by_visual_rows(items):
     return visual_lines
 
 
+def optimize_image_for_ocr(input_path: str) -> str:
+    image = Image.open(input_path)
+
+    image = image.convert("RGB")
+
+    max_width = 1200
+
+    if image.width > max_width:
+        ratio = max_width / image.width
+        new_height = int(image.height * ratio)
+        image = image.resize((max_width, new_height))
+
+    optimized_file = tempfile.NamedTemporaryFile(
+        delete=False,
+        suffix=".jpg"
+    )
+
+    image.save(
+        optimized_file.name,
+        format="JPEG",
+        quality=85,
+        optimize=True
+    )
+
+    return optimized_file.name
+
+
 @app.post("/ocr/routine")
 async def read_routine_image(file: UploadFile = File(...)):
-    suffix = os.path.splitext(file.filename or "")[1] or ".jpg"
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
-        temp_path = temp_file.name
-        content = await file.read()
-        temp_file.write(content)
+    temp_path = None
+    optimized_path = None
 
     try:
-        result = ocr.predict(temp_path)
+        print("OCR request recibida", flush=True)
+
+        suffix = os.path.splitext(file.filename or "")[1] or ".jpg"
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+            temp_path = temp_file.name
+            content = await file.read()
+            temp_file.write(content)
+
+        print(
+            f"Imagen recibida: {file.filename} - {len(content)} bytes",
+            flush=True,
+        )
+
+        optimized_path = optimize_image_for_ocr(temp_path)
+
+        print("Imagen optimizada para OCR:", optimized_path, flush=True)
+
+        result = ocr.predict(optimized_path)
+
+        print("OCR predict terminado", flush=True)
 
         detected_items = []
 
@@ -182,6 +226,11 @@ async def read_routine_image(file: UploadFile = File(...)):
         visual_lines = sort_items_by_visual_rows(detected_items)
         full_text = "\n".join(visual_lines)
 
+        print(
+            f"OCR terminado correctamente. Líneas detectadas: {len(visual_lines)}",
+            flush=True,
+        )
+
         return {
             "success": True,
             "text": full_text,
@@ -192,6 +241,10 @@ async def read_routine_image(file: UploadFile = File(...)):
 
     finally:
         try:
-            os.remove(temp_path)
+            if temp_path and os.path.exists(temp_path):
+                os.remove(temp_path)
+
+            if optimized_path and os.path.exists(optimized_path):
+                os.remove(optimized_path)
         except Exception:
             pass
