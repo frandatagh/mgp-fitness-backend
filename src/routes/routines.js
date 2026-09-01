@@ -294,6 +294,118 @@ router.delete(
   }
 );
 
+router.patch(
+  "/:routineId/exercises/:exerciseId",
+  async (req, res, next) => {
+    try {
+      const {
+        routineId,
+        exerciseId,
+      } = req.params;
+
+      const {
+        name,
+        sets,
+        reps,
+        notes,
+        day,
+      } = req.body;
+
+      /*
+       * Comprobamos primero que
+       * la rutina pertenece al usuario.
+       */
+      const routine =
+        await prisma.routine.findFirst({
+          where: {
+            id: routineId,
+            userId: req.user.id,
+          },
+        });
+
+      if (!routine) {
+        return res.status(404).json({
+          message:
+            "Routine not found",
+        });
+      }
+
+      /*
+       * Comprobamos que el ejercicio
+       * realmente pertenece a esa rutina.
+       */
+      const exercise =
+        await prisma.exercise.findFirst({
+          where: {
+            id: exerciseId,
+            routineId,
+          },
+        });
+
+      if (!exercise) {
+        return res.status(404).json({
+          message:
+            "Exercise not found",
+        });
+      }
+
+      /*
+       * Sólo modificamos ese ejercicio.
+       * Su ID se conserva.
+       */
+      const updatedExercise =
+        await prisma.exercise.update({
+          where: {
+            id: exerciseId,
+          },
+
+          data: {
+            ...(name !== undefined
+              ? {
+                  name:
+                    String(name).trim(),
+                }
+              : {}),
+
+            ...(sets !== undefined
+              ? {
+                  sets:
+                    sets || null,
+                }
+              : {}),
+
+            ...(reps !== undefined
+              ? {
+                  reps:
+                    reps || null,
+                }
+              : {}),
+
+            ...(notes !== undefined
+              ? {
+                  notes:
+                    notes || null,
+                }
+              : {}),
+
+            ...(day !== undefined
+              ? {
+                  day:
+                    day || null,
+                }
+              : {}),
+          },
+        });
+
+      return res.json(
+        updatedExercise
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // --- EXPORT JSON ---
 router.get("/:id/export.json", async (req, res, next) => {
   try {
