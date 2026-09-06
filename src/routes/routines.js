@@ -91,7 +91,10 @@ router.get("/suggestions/:id", verifyToken, async (req, res) => {
 router.get("/", async (req, res, next) => {
   try {
     const routines = await prisma.routine.findMany({
-      where: { userId: req.user.id },
+      where: {
+        userId: req.user.id,
+        deletedAt: null,
+      },
       include: { exercises: true },
       orderBy: { createdAt: "desc" },
     });
@@ -142,24 +145,128 @@ router.get(
   validate(routineIdParamsSchema, "params"),
   async (req, res, next) => {
     try {
-      console.log("🔍 GET /api/routines/:id");
-      console.log("  id param:", req.params.id);
-      console.log("  user from token:", req.user?.id);
+      const userId = req.user.id;
+      const routineId = req.params.id;
 
       const routine = await prisma.routine.findFirst({
-        where: { id: req.params.id, userId: req.user.id },
-        include: { exercises: true },
+        where: {
+          id: req.params.id,
+          userId: req.user.id,
+          deletedAt: null,
+        },
+
+        include: {
+          /*
+           * Última valoración de la rutina.
+           */
+          routineCheckins: {
+            where: {
+              userId,
+            },
+
+            orderBy: [
+              {
+                trackedDate: "desc",
+              },
+              {
+                updatedAt: "desc",
+              },
+            ],
+
+            take: 1,
+          },
+
+          /*
+           * Ejercicios + última valoración
+           * de cada ejercicio.
+           */
+          exercises: {
+            orderBy: {
+              order: "asc",
+            },
+
+            include: {
+              exerciseCheckins: {
+                where: {
+                  userId,
+                },
+
+                orderBy: [
+                  {
+                    trackedDate: "desc",
+                  },
+                  {
+                    updatedAt: "desc",
+                  },
+                ],
+
+                take: 1,
+              },
+            },
+          },
+        },
       });
 
-      console.log("  routine found?", !!routine);
-
       if (!routine) {
-        return res.status(404).json({ message: "Routine not found" });
+        return res.status(404).json({
+          message: "Routine not found",
+        });
       }
 
-      res.json(routine);
+      /*
+       * No enviamos todos los checkins
+       * al frontend.
+       *
+       * Solamente transformamos el último
+       * en lastRating / lastRatedAt.
+       */
+
+      const {
+        routineCheckins,
+        exercises,
+        ...routineData
+      } = routine;
+
+      const response = {
+        ...routineData,
+
+        lastRating:
+          routineCheckins[0]?.score ??
+          null,
+
+        lastRatedAt:
+          routineCheckins[0]?.updatedAt ??
+          null,
+
+        exercises: exercises.map(
+          (exercise) => {
+            const {
+              exerciseCheckins,
+              ...exerciseData
+            } = exercise;
+
+            return {
+              ...exerciseData,
+
+              lastRating:
+                exerciseCheckins[0]?.score ??
+                null,
+
+              lastRatedAt:
+                exerciseCheckins[0]?.updatedAt ??
+                null,
+            };
+          }
+        ),
+      };
+
+      return res.json(response);
     } catch (err) {
-      console.error("❌ Error en GET /api/routines/:id:", err);
+      console.error(
+        "Error obteniendo rutina:",
+        err
+      );
+
       next(err);
     }
   }
@@ -180,8 +287,12 @@ router.put(
 
       // 1) Verificar que la rutina exista y sea del usuario
       const existing = await prisma.routine.findFirst({
-        where: { id: routineId, userId },
-      });
+  where: {
+    id: routineId,
+    userId,
+    deletedAt: null,
+  },
+});
 
       if (!existing) {
         return res.status(404).json({ message: "Routine not found" });
@@ -200,10 +311,7 @@ router.put(
 
         // 2.b) si el body trae exercises, reseteamos la lista
         if (Array.isArray(exercises)) {
-          // borrar los ejercicios anteriores de esta rutina
-          await tx.exercise.deleteMany({
-            where: { routineId },
-          });
+          
 
           // crear los nuevos (si hay)
           if (Array.isArray(exercises)) {
@@ -280,17 +388,92 @@ router.put(
 // DELETE /api/routines/:id -> borrar una rutina propia
 router.delete(
   "/:id",
-  validate(routineIdParamsSchema, "params"),
+  validate(
+    routineIdParamsSchema,
+    "params"
+  ),
   async (req, res, next) => {
     try {
-      const existing = await prisma.routine.findFirst({
-        where: { id: req.params.id, userId: req.user.id },
-      });
-      if (!existing) return res.status(404).json({ message: "Routine not found" });
+      const routineId =
+        req.params.id;
 
-      await prisma.routine.delete({ where: { id: existing.id } });
-      res.status(204).send();
-    } catch (err) { next(err); }
+      const userId =
+        req.user.id;
+
+      const cascade =
+        String(
+          req.query.cascade
+        ).toLowerCase() ===
+        "true";
+
+      /*
+       * Verificar propiedad y
+       * que siga activa.
+       */
+      const existing =
+        await prisma.routine.findFirst({
+          where: {
+            id: routineId,
+            userId,
+            deletedAt: null,
+          },
+        });
+
+      if (!existing) {
+        return res
+          .status(404)
+          .json({
+            message:
+              "Routine not found",
+          });
+      }
+
+      /*
+       * ==========================
+       * BORRADO TOTAL
+       * ==========================
+       */
+
+      if (cascade) {
+        await prisma.routine.delete({
+          where: {
+            id: routineId,
+          },
+        });
+
+        return res.json({
+          mode: "cascade",
+          message:
+            "Rutina e historial asociado eliminados.",
+        });
+      }
+
+      /*
+       * ==========================
+       * BORRADO SEGURO
+       * ==========================
+       */
+
+      await prisma.routine.update({
+        where: {
+          id: routineId,
+        },
+
+        data: {
+          deletedAt:
+            new Date(),
+        },
+      });
+
+      return res.json({
+        mode: "preserve",
+        message:
+          "Rutina eliminada y datos históricos conservados.",
+      });
+
+    } catch (error) {
+      next(error);
+    }
   }
 );
 
@@ -316,12 +499,13 @@ router.patch(
        * la rutina pertenece al usuario.
        */
       const routine =
-        await prisma.routine.findFirst({
-          where: {
-            id: routineId,
-            userId: req.user.id,
-          },
-        });
+  await prisma.routine.findFirst({
+    where: {
+      id: routineId,
+      userId: req.user.id,
+      deletedAt: null,
+    },
+  });
 
       if (!routine) {
         return res.status(404).json({
@@ -518,32 +702,66 @@ router.post("/import/csv", async (req, res, next) => {
 
 // Marcar rutina como "realizada por hoy"
 router.patch(
-  '/:id/done',
-  verifyToken,
-  validate(routineIdParamsSchema, 'params'),
-  async (req, res) => {
+  "/:id/done",
+  validate(
+    routineIdParamsSchema,
+    "params"
+  ),
+  async (req, res, next) => {
     try {
-      const { id } = req.params;
+      const routineId =
+        req.params.id;
 
-      const routine = await prisma.routine.update({
-        where: { id },                // 👈 si usas userId en el where, luego lo ajustamos
-        data: {
-          lastDoneAt: new Date(),     // campo nuevo en la tabla
-        },
-        include: {
-          exercises: true,            // igual que en tu GET, si lo usas
-        },
-      });
+      const userId =
+        req.user.id;
 
-      return res.json(routine);
+      const existing =
+        await prisma.routine.findFirst({
+          where: {
+            id: routineId,
+            userId,
+            deletedAt: null,
+          },
+
+          select: {
+            id: true,
+          },
+        });
+
+      if (!existing) {
+        return res
+          .status(404)
+          .json({
+            message:
+              "Routine not found",
+          });
+      }
+
+      const routine =
+        await prisma.routine.update({
+          where: {
+            id: existing.id,
+          },
+
+          data: {
+            lastDoneAt:
+              new Date(),
+          },
+
+          include: {
+            exercises: true,
+          },
+        });
+
+      return res.json(
+        routine
+      );
     } catch (error) {
-      console.error('Error marcando rutina como realizada:', error);
-      return res
-        .status(500)
-        .json({ message: 'No se pudo marcar la rutina como realizada.' });
+      next(error);
     }
   }
 );
+
 const SUGGESTIONS_EMAIL = "sugerencias@prueba.com";
 
 
