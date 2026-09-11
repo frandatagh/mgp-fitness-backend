@@ -237,6 +237,7 @@ router.get('/me', verifyToken, async (req, res) => {
       monthlyExerciseCheckins,
       weeklyRoutineCheckins,
       monthlyRoutineCheckins,
+      latestRoutineCheckin,
     ] = await Promise.all([
       prisma.runSession.findMany({
         where: { userId },
@@ -302,6 +303,27 @@ router.get('/me', verifyToken, async (req, res) => {
         },
         orderBy: { trackedDate: 'asc' },
       }),
+
+      prisma.routineCheckin.findFirst({
+  where: {
+    userId,
+  },
+
+  orderBy: [
+    {
+      trackedDate: 'desc',
+    },
+    {
+      updatedAt: 'desc',
+    },
+  ],
+
+  select: {
+    score: true,
+    trackedDate: true,
+    updatedAt: true,
+  },
+}),
     ]);
 
     const weeklyDistanceMeters = weeklyRunSessions.reduce(
@@ -370,6 +392,98 @@ router.get('/me', verifyToken, async (req, res) => {
         .map(Number)),
     ]);
 
+    const monthlyCombinedRatingAvg =
+  safeAvg([
+    ...monthlyRoutineCheckins.map(
+      (checkin) =>
+        Number(checkin.score)
+    ),
+
+    ...monthlyRunSessions
+      .map(
+        (session) =>
+          session.rating
+      )
+      .filter(
+        (rating) =>
+          rating != null
+      )
+      .map(Number),
+  ]);
+
+  const latestRatedRunSession =
+  allRunSessions.find(
+    (session) =>
+      session.rating != null
+  ) ?? null;
+
+
+/*
+ * Armamos candidatos:
+ *
+ * - última valoración de rutina
+ * - última valoración de running
+ */
+const latestRatingCandidates = [];
+
+
+if (latestRoutineCheckin) {
+  latestRatingCandidates.push({
+    value: Number(
+      latestRoutineCheckin.score
+    ),
+
+    date: new Date(
+      latestRoutineCheckin.updatedAt ??
+      latestRoutineCheckin.trackedDate
+    ).getTime(),
+  });
+}
+
+
+if (latestRatedRunSession) {
+  latestRatingCandidates.push({
+    value: Number(
+      latestRatedRunSession.rating
+    ),
+
+    date: new Date(
+      latestRatedRunSession.startedAt
+    ).getTime(),
+  });
+}
+
+
+/*
+ * Eliminamos cualquier valor inválido.
+ */
+const validLatestRatingCandidates =
+  latestRatingCandidates.filter(
+    (item) =>
+      Number.isFinite(item.value) &&
+      Number.isFinite(item.date)
+  );
+
+
+/*
+ * Ordenamos de más reciente
+ * a más antiguo.
+ */
+validLatestRatingCandidates.sort(
+  (a, b) =>
+    b.date - a.date
+);
+
+
+/*
+ * El primero es la última
+ * valoración real registrada.
+ */
+const latestAverage =
+  validLatestRatingCandidates[0]
+    ?.value ??
+  null;
+
     const chartLabels = ['1', '2', '3', '4', '5', '6'];
 
     const gymChart = weeklyRoutineCheckins
@@ -400,15 +514,37 @@ router.get('/me', verifyToken, async (req, res) => {
       insights,
 
       performance: {
-        weeklyAverage: combinedRatingAvg,
-        bestDay: routineRatingStats.bestDay ?? runningRatingStats.bestDay,
-        worstDay: routineRatingStats.worstDay ?? runningRatingStats.worstDay,
-        chart: {
-          labels: chartLabels,
-          gym: gymChart,
-          running: runningChart,
-        },
-      },
+  /*
+   * Semana actual
+   */
+  weeklyAverage:
+    combinedRatingAvg,
+
+  /*
+   * Mes actual
+   */
+  monthlyAverage:
+    monthlyCombinedRatingAvg,
+
+  /*
+   * Última valoración histórica
+   */
+  latestAverage,
+
+  bestDay:
+    routineRatingStats.bestDay ??
+    runningRatingStats.bestDay,
+
+  worstDay:
+    routineRatingStats.worstDay ??
+    runningRatingStats.worstDay,
+
+  chart: {
+    labels: chartLabels,
+    gym: gymChart,
+    running: runningChart,
+  },
+},
 
       running: {
         weeklyDurationSeconds,
