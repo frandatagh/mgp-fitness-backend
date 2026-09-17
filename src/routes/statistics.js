@@ -586,4 +586,471 @@ router.get('/advice', verifyToken, async (req, res) => {
   }
 });
 
+/*
+ * =====================================================
+ * ACTIVIDAD / CONSTANCIA HISTÓRICA
+ * =====================================================
+ */
+
+router.get('/activity', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const now = new Date();
+
+    /*
+     * Sólo pedimos los campos necesarios.
+     * No cargamos rutinas completas ni ejercicios completos.
+     */
+    const [
+      routineCheckins,
+      exerciseCheckins,
+      runSessions,
+    ] = await Promise.all([
+      prisma.routineCheckin.findMany({
+        where: {
+          userId,
+        },
+
+        select: {
+          trackedDate: true,
+        },
+
+        orderBy: {
+          trackedDate: 'asc',
+        },
+      }),
+
+      prisma.exerciseCheckin.findMany({
+        where: {
+          userId,
+        },
+
+        select: {
+          trackedDate: true,
+        },
+
+        orderBy: {
+          trackedDate: 'asc',
+        },
+      }),
+
+      prisma.runSession.findMany({
+        where: {
+          userId,
+        },
+
+        select: {
+          startedAt: true,
+        },
+
+        orderBy: {
+          startedAt: 'asc',
+        },
+      }),
+    ]);
+
+
+    /*
+     * =================================================
+     * MAPA DIARIO
+     * =================================================
+     */
+
+    const activityByDate = new Map();
+
+
+    const getOrCreateDay = (dateKey) => {
+      if (!activityByDate.has(dateKey)) {
+        activityByDate.set(dateKey, {
+          date: dateKey,
+
+          routineRecords: 0,
+
+          exerciseRecords: 0,
+
+          runningSessions: 0,
+
+          totalRecords: 0,
+        });
+      }
+
+      return activityByDate.get(dateKey);
+    };
+
+
+    for (const item of routineCheckins) {
+      const dateKey =
+        String(item.trackedDate)
+          .slice(0, 10);
+
+      const day =
+        getOrCreateDay(dateKey);
+
+      day.routineRecords += 1;
+      day.totalRecords += 1;
+    }
+
+
+    for (const item of exerciseCheckins) {
+      const dateKey =
+        String(item.trackedDate)
+          .slice(0, 10);
+
+      const day =
+        getOrCreateDay(dateKey);
+
+      day.exerciseRecords += 1;
+      day.totalRecords += 1;
+    }
+
+
+    for (const session of runSessions) {
+      const dateKey =
+        toDateKey(
+          new Date(
+            session.startedAt
+          )
+        );
+
+      const day =
+        getOrCreateDay(dateKey);
+
+      day.runningSessions += 1;
+      day.totalRecords += 1;
+    }
+
+
+    /*
+     * =================================================
+     * HELPERS DE FECHA
+     * =================================================
+     */
+
+    const addDays = (
+      date,
+      amount
+    ) => {
+      const result =
+        new Date(date);
+
+      result.setDate(
+        result.getDate() +
+        amount
+      );
+
+      return result;
+    };
+
+
+    const buildDaysBetween = (
+      start,
+      end
+    ) => {
+      const result = [];
+
+      let cursor =
+        startOfDay(start);
+
+      const finalDate =
+        startOfDay(end);
+
+      while (
+        cursor <= finalDate
+      ) {
+        const dateKey =
+          toDateKey(cursor);
+
+        const existing =
+          activityByDate.get(
+            dateKey
+          );
+
+        result.push({
+          date: dateKey,
+
+          routineRecords:
+            existing
+              ?.routineRecords ??
+            0,
+
+          exerciseRecords:
+            existing
+              ?.exerciseRecords ??
+            0,
+
+          runningSessions:
+            existing
+              ?.runningSessions ??
+            0,
+
+          totalRecords:
+            existing
+              ?.totalRecords ??
+            0,
+
+          active:
+            (
+              existing
+                ?.totalRecords ??
+              0
+            ) > 0,
+        });
+
+        cursor =
+          addDays(
+            cursor,
+            1
+          );
+      }
+
+      return result;
+    };
+
+
+    /*
+     * =================================================
+     * SEMANA ACTUAL
+     * =================================================
+     */
+
+    const currentWeekStart =
+      startOfWeek(now);
+
+    const currentWeekEnd =
+      addDays(
+        currentWeekStart,
+        6
+      );
+
+    const currentWeek =
+      buildDaysBetween(
+        currentWeekStart,
+        currentWeekEnd
+      );
+
+
+    /*
+     * =================================================
+     * MES ACTUAL
+     * =================================================
+     */
+
+    const currentMonthStart =
+      startOfMonth(now);
+
+    const currentMonthEnd =
+      new Date(
+        now.getFullYear(),
+        now.getMonth() + 1,
+        0
+      );
+
+    const currentMonth =
+      buildDaysBetween(
+        currentMonthStart,
+        currentMonthEnd
+      );
+
+
+    /*
+     * =================================================
+     * HISTORIAL SEMANAL
+     * =================================================
+     */
+
+    const registeredDates =
+      Array.from(
+        activityByDate.keys()
+      ).sort();
+
+
+    const firstRegisteredDate =
+      registeredDates[0] ??
+      toDateKey(now);
+
+
+    /*
+     * Usamos mediodía para evitar problemas
+     * al interpretar YYYY-MM-DD.
+     */
+    const firstDate =
+      new Date(
+        `${firstRegisteredDate}T12:00:00`
+      );
+
+    let historyCursor =
+      startOfWeek(
+        firstDate
+      );
+
+    const currentHistoryWeek =
+      startOfWeek(now);
+
+    const weeklyHistory = [];
+
+
+    while (
+      historyCursor <=
+      currentHistoryWeek
+    ) {
+      const weekEnd =
+        addDays(
+          historyCursor,
+          6
+        );
+
+      const days =
+        buildDaysBetween(
+          historyCursor,
+          weekEnd
+        );
+
+      const activeDays =
+        days.filter(
+          (day) =>
+            day.active
+        ).length;
+
+      const routineRecords =
+        days.reduce(
+          (sum, day) =>
+            sum +
+            day.routineRecords,
+          0
+        );
+
+      const exerciseRecords =
+        days.reduce(
+          (sum, day) =>
+            sum +
+            day.exerciseRecords,
+          0
+        );
+
+      const runningSessions =
+        days.reduce(
+          (sum, day) =>
+            sum +
+            day.runningSessions,
+          0
+        );
+
+      const totalRecords =
+        routineRecords +
+        exerciseRecords +
+        runningSessions;
+
+
+      /*
+       * Índice visual de constancia.
+       *
+       * 7 días activos = 10.
+       * 0 días activos = 0.
+       *
+       * Los registros individuales se muestran
+       * como detalle, pero no inflan artificialmente
+       * el índice.
+       */
+      const consistencyScore =
+        Number(
+          (
+            activeDays /
+            7 *
+            10
+          ).toFixed(1)
+        );
+
+
+      weeklyHistory.push({
+        weekStart:
+          toDateKey(
+            historyCursor
+          ),
+
+        weekEnd:
+          toDateKey(
+            weekEnd
+          ),
+
+        activeDays,
+
+        routineRecords,
+
+        exerciseRecords,
+
+        runningSessions,
+
+        totalRecords,
+
+        consistencyScore,
+      });
+
+
+      historyCursor =
+        addDays(
+          historyCursor,
+          7
+        );
+    }
+
+
+    /*
+     * =================================================
+     * TOTALES
+     * =================================================
+     */
+
+    const allDays =
+      Array.from(
+        activityByDate.values()
+      );
+
+    const totalActiveDays =
+      allDays.filter(
+        (day) =>
+          day.totalRecords >
+          0
+      ).length;
+
+
+    return res.json({
+      currentWeek,
+
+      currentMonth,
+
+      weeklyHistory,
+
+      totals: {
+        activeDays:
+          totalActiveDays,
+
+        routineRecords:
+          routineCheckins.length,
+
+        exerciseRecords:
+          exerciseCheckins.length,
+
+        runningSessions:
+          runSessions.length,
+
+        totalRecords:
+          routineCheckins.length +
+          exerciseCheckins.length +
+          runSessions.length,
+      },
+    });
+
+  } catch (error) {
+    console.error(
+      'Error obteniendo actividad:',
+      error
+    );
+
+    return res.status(500).json({
+      message:
+        'Error interno obteniendo actividad',
+    });
+  }
+});
+
 export default router;
