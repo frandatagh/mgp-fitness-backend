@@ -69,19 +69,30 @@ router.patch('/me', verifyToken, validate(profileUpdateSchema), async (req, res,
     }
 
     const {
-      name,
-      goal,
-      heightCm,
-      weightKg,
-      birthDate,
-      profileImageUrl,
-      planType,
-      weeklyKmGoal,
-      mainGoalType,
-      mainGoalPeriod,
-      mainGoalMetric,
-      mainGoalTarget,
-    } = req.body;
+  name,
+  goal,
+  heightCm,
+  weightKg,
+  birthDate,
+  profileImageUrl,
+  planType,
+  weeklyKmGoal,
+
+  mainGoalType,
+  mainGoalPeriod,
+  mainGoalMetric,
+  mainGoalTarget,
+
+  mainGoalStartMode,
+  mainGoalStartedAt,
+} = req.body;
+
+const parsedMainGoalStartedAt =
+  typeof mainGoalStartedAt === 'undefined'
+    ? undefined
+    : mainGoalStartedAt
+      ? new Date(mainGoalStartedAt)
+      : null;
 
     const existingUser = await prisma.user.findUnique({
       where: { id: authUserId },
@@ -140,6 +151,15 @@ const updatedProfile = await prisma.userProfile.upsert({
       typeof mainGoalTarget !== 'undefined'
         ? mainGoalTarget
         : null,
+    mainGoalStartMode:
+      typeof mainGoalStartMode !== 'undefined'
+      ? mainGoalStartMode
+     : null,
+
+    mainGoalStartedAt:
+      typeof parsedMainGoalStartedAt !== 'undefined'
+      ? parsedMainGoalStartedAt
+      : null,
   },
   update: {
     ...(typeof goal !== 'undefined' ? { goal } : {}),
@@ -167,6 +187,18 @@ const updatedProfile = await prisma.userProfile.upsert({
     ...(typeof mainGoalTarget !== 'undefined'
       ? { mainGoalTarget }
       : {}),
+      ...(typeof mainGoalStartMode !== 'undefined'
+  ? {
+      mainGoalStartMode,
+    }
+  : {}),
+
+...(typeof parsedMainGoalStartedAt !== 'undefined'
+  ? {
+      mainGoalStartedAt:
+        parsedMainGoalStartedAt,
+    }
+  : {}),
   },
 });
 
