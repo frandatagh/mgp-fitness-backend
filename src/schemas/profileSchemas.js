@@ -14,38 +14,83 @@ export const profileUpdateSchema = z.object({
     .optional(),
 
   birthDate: z
-    .union([z.string().datetime(), z.null()])
+    .union([
+      z.string().datetime(),
+      z.null(),
+    ])
     .optional(),
 
   profileImageUrl: z
-    .union([z.string().trim().url(), z.string().trim().length(0), z.null()])
+    .union([
+      z.string().trim().url(),
+      z.string().trim().length(0),
+      z.null(),
+    ])
     .optional(),
 
   planType: z
-    .enum(['standard', 'pro', 'professional'])
+    .enum([
+      'standard',
+      'pro',
+      'professional',
+    ])
     .optional(),
 
   weeklyKmGoal: z
-    .union([z.number(), z.null()])
+    .union([
+      z.number(),
+      z.null(),
+    ])
     .optional(),
 
-  // Objetivo principal del usuario
+  // Objetivo principal
   mainGoalType: z
-    .enum(['running', 'routine'])
+    .enum([
+      'running',
+      'routine',
+    ])
     .nullable()
     .optional(),
 
   mainGoalPeriod: z
-    .enum(['weekly', 'monthly'])
+    .enum([
+      'weekly',
+      'monthly',
+    ])
     .nullable()
     .optional(),
 
   mainGoalMetric: z
-    .enum(['distance_km', 'sessions', 'minutes', 'avg_effort'])
+    .enum([
+      'distance_km',
+      'sessions',
+      'minutes',
+      'avg_effort',
+    ])
     .nullable()
     .optional(),
 
   mainGoalTarget: z
-    .union([z.number().positive(), z.null()])
+    .union([
+      z.number().positive(),
+      z.null(),
+    ])
+    .optional(),
+
+  // Cómo comienza a contar el objetivo
+  mainGoalStartMode: z
+    .enum([
+      'current_period',
+      'from_zero',
+    ])
+    .nullable()
+    .optional(),
+
+  // Fecha/hora real desde donde cuenta
+  mainGoalStartedAt: z
+    .union([
+      z.string().datetime(),
+      z.null(),
+    ])
     .optional(),
 });

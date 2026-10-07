@@ -106,10 +106,15 @@ model UserProfile {
   planType        String    @default("standard")
   weeklyKmGoal    Float?
 
+  // Objetivo principal
   mainGoalType   String?
   mainGoalPeriod String?
   mainGoalMetric String?
   mainGoalTarget Float?
+
+  // Punto de inicio del objetivo
+  mainGoalStartMode String?
+  mainGoalStartedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

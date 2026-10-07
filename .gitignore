@@ -142,6 +142,8 @@ vite.config.ts.timestamp-*
 backups/
 *.dump
 *.sql
+# Permitir migraciones de Prisma
+!prisma/migrations/**/migration.sql
 
 ocr-service/.venv/
 .venv/
