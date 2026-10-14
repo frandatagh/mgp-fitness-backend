@@ -5,13 +5,26 @@ import { validate } from '../middlewares/validate.js';
 import { optionalAuth } from '../middlewares/optionalAuth.js';
 import { contactCreateSchema } from '../schemas/contactSchemas.js';
 import { sendContactNotificationEmail } from '../services/emailService.js';
+import {
+  requireTurnstile,
+} from '../middlewares/requireTurnstile.js';
 
 const router = express.Router();
 
 router.post(
   '/',
   optionalAuth,
+
+  /*
+   * Seguridad anti-bot.
+   *
+   * Debe ejecutarse ANTES de guardar
+   * cualquier mensaje.
+   */
+  requireTurnstile,
+
   validate(contactCreateSchema),
+
   async (req, res, next) => {
     try {
       const {
