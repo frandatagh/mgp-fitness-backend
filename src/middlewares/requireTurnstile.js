@@ -22,6 +22,22 @@ export async function requireTurnstile(
 
 
     if (!verification.success) {
+
+      console.error(
+        'Turnstile rechazado:',
+        {
+          errorCodes:
+            verification.errorCodes,
+
+          hostname:
+            verification.hostname,
+
+          action:
+            verification.action,
+        }
+      );
+
+
       return res
         .status(403)
         .json({
@@ -36,11 +52,7 @@ export async function requireTurnstile(
 
     /*
      * El token ya cumplió su función.
-     *
-     * Lo eliminamos antes de pasar
-     * al schema de Contacto para que
-     * NO forme parte de los datos
-     * normales de la aplicación.
+     * No lo enviamos al schema ni a Prisma.
      */
     delete req.body.turnstileToken;
 
@@ -55,12 +67,6 @@ export async function requireTurnstile(
     );
 
 
-    /*
-     * Fallamos de forma segura.
-     *
-     * Si Cloudflare no puede verificarse,
-     * NO dejamos pasar el formulario.
-     */
     return res
       .status(503)
       .json({
