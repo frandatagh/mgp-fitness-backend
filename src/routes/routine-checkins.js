@@ -47,26 +47,41 @@ router.post(
         });
       }
 
-      const trackedDate = getArgentinaDateKey();
+      
+const trackedDate = getArgentinaDateKey();
 
-      const checkin = await prisma.routineCheckin.upsert({
-        where: {
-          userId_routineId_trackedDate: {
-            userId,
-            routineId,
-            trackedDate,
-          },
-        },
-        update: {
-          score,
-        },
-        create: {
-          userId,
-          routineId,
-          score,
-          trackedDate,
-        },
-      });
+const checkin = await prisma.$transaction(async (tx) => {
+  const savedCheckin = await tx.routineCheckin.upsert({
+    where: {
+      userId_routineId_trackedDate: {
+        userId,
+        routineId,
+        trackedDate,
+      },
+    },
+    update: {
+      score,
+    },
+    create: {
+      userId,
+      routineId,
+      score,
+      trackedDate,
+    },
+  });
+
+  await tx.routine.update({
+    where: {
+      id: routineId,
+    },
+    data: {
+      lastDoneAt: new Date(),
+    },
+  });
+
+  return savedCheckin;
+});
+
 
       return res.status(200).json({
         message: 'Rutina registrada correctamente.',
