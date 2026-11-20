@@ -6,9 +6,12 @@ import { validate } from '../middlewares/validate.js';
 
 const router = Router();
 
+
 const routineCheckinBodySchema = z.object({
   score: z.number().int().min(1).max(10),
+  performedAt: z.string().datetime({ offset: true }).optional(),
 });
+
 
 const routineIdParamsSchema = z.object({
   id: z.string().min(1),
@@ -32,7 +35,21 @@ router.post(
     try {
       const userId = req.user.id;
       const routineId = req.params.id;
-      const { score } = req.body;
+      const { score, performedAt } = req.body;
+
+      const now = new Date();
+
+      const performedDate = performedAt
+        ? new Date(performedAt)
+        : now;
+
+        // Evitamos aceptar fechas futuras incorrectas.
+      if (performedDate.getTime() > now.getTime() + 5 * 60 * 1000) {
+        return res.status(400).json({
+        message: 'La fecha de realización no puede estar en el futuro.',
+        });
+      }
+
 
       const routine = await prisma.routine.findFirst({
         where: {
@@ -48,39 +65,48 @@ router.post(
       }
 
       
-const trackedDate = getArgentinaDateKey();
 
-const checkin = await prisma.$transaction(async (tx) => {
-  const savedCheckin = await tx.routineCheckin.upsert({
-    where: {
-      userId_routineId_trackedDate: {
-        userId,
-        routineId,
-        trackedDate,
-      },
-    },
-    update: {
-      score,
-    },
-    create: {
-      userId,
-      routineId,
-      score,
-      trackedDate,
-    },
-  });
+      const trackedDate = getArgentinaDateKey(performedDate);
 
-  await tx.routine.update({
-    where: {
-      id: routineId,
-    },
-    data: {
-      lastDoneAt: new Date(),
-    },
-  });
+      const checkin = await prisma.$transaction(async (tx) => {
+        const savedCheckin = await tx.routineCheckin.upsert({
+          where: {
+            userId_routineId_trackedDate: {
+              userId,
+              routineId,
+              trackedDate,
+            },
+          },
+          update: {
+            score,
+          },
+          create: {
+            userId,
+            routineId,
+            score,
+            trackedDate,
+          },
+        });
 
-  return savedCheckin;
-});
+        // Solo actualizamos lastDoneAt si esta realización
+        // es más reciente que la última registrada.
+        await tx.routine.updateMany({
+          where: {
+            id: routineId,
+            userId,
+            OR: [
+              { lastDoneAt: null },
+              { lastDoneAt: { lt: performedDate } },
+            ],
+          },
+          data: {
+            lastDoneAt: performedDate,
+          },
+        });
+
+        return savedCheckin;
+      });
+
 
 
       return res.status(200).json({
