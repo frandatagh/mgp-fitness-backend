@@ -1,5 +1,6 @@
 // src/routes/routines.js
 import express from "express";
+import { createHash } from "node:crypto";
 import prisma from "../config/prismaClient.js";
 import { verifyToken } from "../middlewares/auth.js";
 
@@ -102,42 +103,122 @@ router.get("/", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /api/routines -> crea rutina del usuario autenticado
+ // POST /api/routines -> crea rutina del usuario autenticado
 router.post("/", validate(routineCreateSchema), async (req, res, next) => {
-  try {
-    const { title, notes, exercises } = req.body;
+  const userId = req.user.id;
+  const { title, notes, exercises } = req.body;
 
+  // Identificador opcional para evitar creaciones duplicadas.
+  const requestId = req.get("Idempotency-Key") || null;
+
+  if (
+    requestId &&
+    !/^[A-Za-z0-9_-]{8,128}$/.test(requestId)
+  ) {
+    return res.status(400).json({
+      message: "Identificador de solicitud inválido.",
+    });
+  }
+
+  // Normalizamos los ejercicios una única vez.
+  const normalizedExercises = Array.isArray(exercises)
+    ? exercises
+        .filter((ex) => typeof ex?.name === "string" && ex.name.trim())
+        .map((ex, index) => ({
+          name: ex.name,
+          sets: ex.sets ?? null,
+          reps: ex.reps ?? null,
+          notes: ex.notes ?? null,
+          day: ex.day ?? null,
+          order: ex.order ?? index,
+        }))
+    : [];
+
+  // Huella que identifica los datos de esta solicitud.
+  const requestHash = requestId
+    ? createHash("sha256")
+        .update(JSON.stringify({
+          title,
+          notes: notes ?? null,
+          exercises: normalizedExercises,
+        }))
+        .digest("hex")
+    : null;
+
+  // Respuesta reutilizable para solicitudes repetidas.
+  const respondWithExisting = (existing, res) => {
+    if (existing.clientRequestHash !== requestHash) {
+      return res.status(409).json({
+        message: "La clave de solicitud ya fue utilizada con otros datos.",
+      });
+    }
+
+    return res.status(200).json(existing);
+  };
+
+  try {
+    // 1. Buscamos si esta solicitud ya fue procesada.
+    if (requestId) {
+      const existing = await prisma.routine.findFirst({
+        where: {
+          userId,
+          clientRequestId: requestId,
+        },
+        include: { exercises: true },
+      });
+
+      if (existing) {
+        return respondWithExisting(existing, res);
+      }
+    }
+
+    // 2. Si no existe, creamos la rutina.
     const created = await prisma.routine.create({
       data: {
         title,
         notes: notes ?? null,
-        userId: req.user.id,
-        exercises: Array.isArray(exercises) && exercises.length
+        userId,
+
+        ...(requestId
           ? {
-              create: exercises
-                .map((ex, idx) => ({
-                  name: ex?.name,
-                  sets: ex?.sets ?? null,
-                  reps: ex?.reps ?? null,
-                  notes: ex?.notes ?? null,
-                  day: ex?.day ?? null, 
-                  order: ex?.order ?? idx,
-                }))
-                .filter(e => e.name && typeof e.name === "string"),
+              clientRequestId: requestId,
+              clientRequestHash: requestHash,
             }
+          : {}),
+
+        exercises: normalizedExercises.length
+          ? { create: normalizedExercises }
           : undefined,
       },
       include: { exercises: true },
     });
 
-    res.status(201).json(created);
-  } catch (err) {
-    if (err?.code === "P2002") {
-      return res.status(409).json({ message: "routine title already exists for this user" });
+    return res.status(201).json(created);
+
+  } catch (error) {
+    // 3. Protegemos también las solicitudes simultáneas.
+    if (requestId && error?.code === "P2002") {
+      try {
+        const existing = await prisma.routine.findFirst({
+          where: {
+            userId,
+            clientRequestId: requestId,
+          },
+          include: { exercises: true },
+        });
+
+        if (existing) {
+          return respondWithExisting(existing, res);
+        }
+      } catch (lookupError) {
+        return next(lookupError);
+      }
     }
-    next(err);
+
+    return next(error);
   }
 });
+
 
 // GET /api/routines/:id -> detalle de una rutina propia
 router.get(
