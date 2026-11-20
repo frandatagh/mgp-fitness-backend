@@ -6,10 +6,13 @@ import { validate } from '../middlewares/validate.js';
 
 const router = Router();
 
+
 const exerciseCheckinBodySchema = z.object({
   routineId: z.string().min(1),
   score: z.number().int().min(1).max(10),
+  performedAt: z.string().datetime({ offset: true }).optional(),
 });
+
 
 const exerciseIdParamsSchema = z.object({
   id: z.string().min(1),
@@ -33,7 +36,21 @@ router.post(
     try {
       const userId = req.user.id;
       const exerciseId = req.params.id;
-      const { routineId, score } = req.body;
+      const { routineId, score, performedAt } = req.body;
+
+      const now = new Date();
+
+      const performedDate = performedAt
+        ? new Date(performedAt)
+        : now;
+
+      // Evitamos fechas futuras incorrectas.
+      if (performedDate.getTime() > now.getTime() + 5 * 60 * 1000) {
+        return res.status(400).json({
+          message: 'La fecha de realización no puede estar en el futuro.',
+        });
+      }
+
 
       const exercise = await prisma.exercise.findFirst({
         where: {
@@ -51,28 +68,28 @@ router.post(
         });
       }
 
-      const trackedDate = getArgentinaDateKey();
+      const trackedDate = getArgentinaDateKey(performedDate);
 
-const checkin = await prisma.exerciseCheckin.upsert({
-  where: {
-    userId_exerciseId_trackedDate: {
-      userId,
-      exerciseId,
-      trackedDate,
-    },
-  },
-  update: {
-    routineId,
-    score,
-  },
-  create: {
-    userId,
-    routineId,
-    exerciseId,
-    score,
-    trackedDate,
-  },
-});
+      const checkin = await prisma.exerciseCheckin.upsert({
+        where: {
+          userId_exerciseId_trackedDate: {
+            userId,
+            exerciseId,
+            trackedDate,
+          },
+        },
+        update: {
+          routineId,
+          score,
+        },
+        create: {
+          userId,
+          routineId,
+          exerciseId,
+          score,
+          trackedDate,
+        },
+      });
 
       return res.status(200).json({
         message: 'Ejercicio registrado correctamente.',
