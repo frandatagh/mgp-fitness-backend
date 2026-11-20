@@ -24,7 +24,11 @@ app.set('etag', false);
 const corsOptions = {
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Idempotency-Key',
+  ],
 };
 
 app.use(cors(corsOptions));
