@@ -64,12 +64,43 @@ router.post(
         });
       }
 
-      
-
       const trackedDate = getArgentinaDateKey(performedDate);
 
       const checkin = await prisma.$transaction(async (tx) => {
-        const savedCheckin = await tx.routineCheckin.upsert({
+
+        // 1. Crear el registro solamente si no existe
+        // una valoración de esta rutina para ese día.
+        await tx.routineCheckin.createMany({
+          data: [{
+            userId,
+            routineId,
+            score,
+            trackedDate,
+            performedAt: performedDate,
+          }],
+          skipDuplicates: true,
+        });
+
+        // 2. Actualizar únicamente cuando la nueva
+        // valoración sea posterior a la almacenada.
+        await tx.routineCheckin.updateMany({
+          where: {
+            userId,
+            routineId,
+            trackedDate,
+            OR: [
+              { performedAt: null },
+              { performedAt: { lt: performedDate } },
+            ],
+          },
+          data: {
+            score,
+            performedAt: performedDate,
+          },
+        });
+
+        // 3. Recuperar la valoración definitiva.
+        const savedCheckin = await tx.routineCheckin.findUnique({
           where: {
             userId_routineId_trackedDate: {
               userId,
@@ -77,19 +108,10 @@ router.post(
               trackedDate,
             },
           },
-          update: {
-            score,
-          },
-          create: {
-            userId,
-            routineId,
-            score,
-            trackedDate,
-          },
         });
 
-        // Solo actualizamos lastDoneAt si esta realización
-        // es más reciente que la última registrada.
+        // 4. Actualizar la última realización solamente
+        // si esta fecha es más reciente.
         await tx.routine.updateMany({
           where: {
             id: routineId,
@@ -106,8 +128,6 @@ router.post(
 
         return savedCheckin;
       });
-
-
 
       return res.status(200).json({
         message: 'Rutina registrada correctamente.',

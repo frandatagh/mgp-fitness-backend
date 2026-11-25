@@ -70,26 +70,55 @@ router.post(
 
       const trackedDate = getArgentinaDateKey(performedDate);
 
-      const checkin = await prisma.exerciseCheckin.upsert({
-        where: {
-          userId_exerciseId_trackedDate: {
+      const checkin = await prisma.$transaction(async (tx) => {
+
+        // 1. Crear el registro únicamente si todavía
+        // no existe una valoración del ejercicio para ese día.
+        await tx.exerciseCheckin.createMany({
+          data: [{
+            userId,
+            routineId,
+            exerciseId,
+            score,
+            trackedDate,
+            performedAt: performedDate,
+          }],
+          skipDuplicates: true,
+        });
+
+        // 2. Actualizar solamente si la nueva valoración
+        // fue realizada después de la que está guardada.
+        await tx.exerciseCheckin.updateMany({
+          where: {
             userId,
             exerciseId,
             trackedDate,
+            OR: [
+              { performedAt: null },
+              { performedAt: { lt: performedDate } },
+            ],
           },
-        },
-        update: {
-          routineId,
-          score,
-        },
-        create: {
-          userId,
-          routineId,
-          exerciseId,
-          score,
-          trackedDate,
-        },
+          data: {
+            routineId,
+            score,
+            performedAt: performedDate,
+          },
+        });
+
+        // 3. Recuperar la valoración definitiva.
+        const savedCheckin = await tx.exerciseCheckin.findUnique({
+          where: {
+            userId_exerciseId_trackedDate: {
+              userId,
+              exerciseId,
+              trackedDate,
+            },
+          },
+        });
+
+        return savedCheckin;
       });
+
 
       return res.status(200).json({
         message: 'Ejercicio registrado correctamente.',

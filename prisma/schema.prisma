@@ -126,15 +126,16 @@ model UserProfile {
 }
 
 model ExerciseCheckin {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   userId      String
   routineId   String
   exerciseId  String
   score       Int
   notes       String?
   trackedDate String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  performedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   routine  Routine  @relation(fields: [routineId], references: [id], onDelete: Cascade)
@@ -147,13 +148,14 @@ model ExerciseCheckin {
 }
 
 model RoutineCheckin {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   userId      String
   routineId   String
   score       Int
   trackedDate String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  performedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   routine Routine @relation(fields: [routineId], references: [id], onDelete: Cascade)
